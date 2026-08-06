@@ -1,8 +1,8 @@
 use core::f64::consts::TAU;
-use fasttime::{DateTime};
+use fasttime::{DateTime, OffsetDateTime};
 use libm::{cos, floor, fmod, sin};
 
-use crate::{AstronDatetimeExt, DateExt, delta_t_2000};
+use crate::{AstronDatetimeExt, DateExt, SECONDS_PER_DAY, delta_t_2000};
 
 const LUNAR_ORBIT_PERIOD: f64 = 29.530588861;
 
@@ -57,14 +57,14 @@ pub struct Moon {
     phase: Phase,
     /// illumination in percentage
     illumination: f64,
-    /// JD of upcoming new moon in UTC
-    new_moon_utc: f64,
-    /// JD of upcoming full moon in UTC
-    full_moon_utc: f64,
-    /// JD of upcoming first quarter in UTC
-    first_quarter_utc: f64,
-    /// JD of upcoming last quarter in UTC
-    last_quarter_utc: f64,
+    /// local JD of upcoming new moon
+    new_moon: f64,
+    /// local JD of upcoming full moon
+    full_moon: f64,
+    /// local JD of upcoming first quarter
+    first_quarter: f64,
+    /// local JD of upcoming last quarter
+    last_quarter: f64,
 }
 
 /// get decimal year by today with `offset` days
@@ -74,14 +74,16 @@ fn decimal_year(now: &DateTime, offset: f64) -> f64 {
 }
 
 impl Moon {
-    pub fn update(&mut self, now_utc: &DateTime) {
+    pub fn update(&mut self, now: &OffsetDateTime) {
+        let now_utc = &now.utc;
         let jd_now_utc = now_utc.to_julian();
-        
+        let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
+
         // upcoming moon events
-        self.new_moon_utc = upcoming_moon_phase_jd(now_utc, Phase::New);
-        self.full_moon_utc = upcoming_moon_phase_jd(now_utc, Phase::Full);
-        self.first_quarter_utc = upcoming_moon_phase_jd(now_utc, Phase::FirstQuarter);
-        self.last_quarter_utc = upcoming_moon_phase_jd(now_utc, Phase::LastQuarter);
+        self.new_moon = upcoming_moon_phase_jd(now_utc, Phase::New) + tz_offset_days;
+        self.full_moon = upcoming_moon_phase_jd(now_utc, Phase::Full) + tz_offset_days;
+        self.first_quarter = upcoming_moon_phase_jd(now_utc, Phase::FirstQuarter) + tz_offset_days;
+        self.last_quarter = upcoming_moon_phase_jd(now_utc, Phase::LastQuarter) + tz_offset_days;
 
         // find the Julian days of last new moon,
         // push back one lunar period and re-calculate it if the day is in the future.
@@ -108,27 +110,27 @@ impl Moon {
     }
 
     #[inline]
-    /// date of upcoming new moon in UTC
+    /// upcoming new moon in local time
     pub fn upcoming_new_moon(&self) -> DateTime {
-        DateTime::from_julian(self.new_moon_utc)
+        DateTime::from_julian(self.new_moon)
     }
 
     #[inline]
-    /// date of upcoming full moon in UTC
+    /// upcoming full moon in local time
     pub fn upcoming_full_moon(&self) -> DateTime {
-        DateTime::from_julian(self.full_moon_utc)
+        DateTime::from_julian(self.full_moon)
     }
 
     #[inline]
-    /// date of upcoming first quarter in UTC
+    /// upcoming first quarter in local time
     pub fn upcoming_first_quarter(&self) -> DateTime {
-        DateTime::from_julian(self.first_quarter_utc)
+        DateTime::from_julian(self.first_quarter)
     }
     
     #[inline]
-    /// date of upcoming last quarter in UTC
+    /// upcoming last quarter in local time
     pub fn upcoming_last_quarter(&self) -> DateTime {
-        DateTime::from_julian(self.last_quarter_utc)
+        DateTime::from_julian(self.last_quarter)
     }
 
     // lunar age and illumination

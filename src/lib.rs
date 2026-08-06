@@ -9,6 +9,14 @@ pub mod ui;
 pub const MICROSECS_PER_SEC: u64 = 1_000_000;
 const SECONDS_PER_DAY: f64 = 24.0 * 3600.0;
 
+pub const D2000: Date = Date::from_ymd_unchecked(2000, 1, 1);
+pub const MIDNIGHT: Time = Time {
+    hour: 0,
+    minute: 0,
+    second: 0,
+    nanosecond: 0,
+};
+
 pub type SSD1306<DI> = ssd1306::Ssd1306Async<
     DI,
     ssd1306::size::DisplaySize128x64,
@@ -18,7 +26,7 @@ pub type SSD1306<DI> = ssd1306::Ssd1306Async<
 use core::f64::consts::PI;
 
 use esp_hal::rng;
-use fasttime::{Date, DateTime};
+use fasttime::{Date, DateTime, Time};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 #[derive(Debug, thiserror::Error)]

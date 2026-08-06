@@ -1,25 +1,54 @@
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel;
 use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder, ascii};
 use embedded_graphics::text::{Baseline, Text};
 use embedded_graphics::{pixelcolor, prelude::Drawable, prelude::Point};
 use fasttime::{Date, DateTime, Time};
 use ssd1306::{Ssd1306Async, prelude::*};
 
+use crate::board::I2cBusDeviceAsync;
 use crate::events::NtpStatus;
 use crate::moon::{self, Moon};
 use crate::sun::{DayProgress, Sun};
-use crate::{AppError, AstronDatetimeExt, HorizontalCoordinate, SSD1306};
+use crate::{AppError, AstronDatetimeExt, D2000, HorizontalCoordinate, MIDNIGHT, SSD1306};
 
 extern crate alloc;
 use alloc::format;
+static UPDATE_CMD_CHAN: channel::Channel<CriticalSectionRawMutex, UpdateCmd, 3> =
+    channel::Channel::new();
 
 #[derive(Clone)]
-pub struct CommonState {
+enum UpdateCmd {
+    SetDatetime {
+        datetime: DateTime,
+        lst: (u8, u8, u8),
+        last_ntp_status: NtpStatus,
+    },
+    SetLunar {
+        lunar_phase: moon::Phase,
+        lunar_illumination: f64,
+        next_new_moon: Date,
+        next_full_moon: Date,
+        next_first_quarter: Date,
+        next_last_quarter: Date,
+    },
+    SetSolar {
+        day_progress: DayProgress,
+        sunrise_at: Time,
+        sunset_at: Time,
+        sun_pos: HorizontalCoordinate,
+    },
+    Draw,
+}
+
+#[derive(Clone)]
+struct DatetimeStatus {
     datetime: DateTime,
     last_ntp_status: NtpStatus,
     lst: (u8, u8, u8),
 }
 
-impl CommonState {
+impl DatetimeStatus {
     pub fn update(&mut self, datetime: DateTime, lst: (u8, u8, u8), last_ntp_status: NtpStatus) {
         self.last_ntp_status = last_ntp_status;
         self.lst = lst;
@@ -27,7 +56,7 @@ impl CommonState {
     }
 }
 
-impl Default for CommonState {
+impl Default for DatetimeStatus {
     fn default() -> Self {
         Self {
             lst: (0, 0, 0),
@@ -37,7 +66,7 @@ impl Default for CommonState {
     }
 }
 
-impl core::fmt::Display for CommonState {
+impl core::fmt::Display for DatetimeStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let t = if let NtpStatus::OK = self.last_ntp_status {
             format!(
@@ -67,10 +96,16 @@ Sidereal         {}"#,
     }
 }
 
-#[derive(Clone)]
-pub enum View {
-    Lunar {
-        now: CommonState,
+enum View {
+    SunInfo {
+        datetime: DatetimeStatus,
+        day_progress: DayProgress,
+        sunrise_at: Time,
+        sunset_at: Time,
+        sun_pos: HorizontalCoordinate,
+    },
+    MoonInfo {
+        datetime: DatetimeStatus,
         lunar_phase: moon::Phase,
         lunar_illumination: f64,
         next_new_moon: Date,
@@ -78,35 +113,28 @@ pub enum View {
         next_first_quarter_moon: Date,
         next_last_quarter_moon: Date,
     },
-    Solar {
-        now: CommonState,
-        day_progress: DayProgress,
-        sunrise_at: Time,
-        sunset_at: Time,
-        sun_pos: HorizontalCoordinate,
-    },
 }
 
 impl View {
-    fn new_lunar_view() -> Self {
-        Self::Lunar {
-            lunar_phase: moon::Phase::New,
-            lunar_illumination: 0.0,
-            now: Default::default(),
-            next_new_moon: Date::from_ymd_unchecked(1970, 1, 1),
-            next_full_moon: Date::from_ymd_unchecked(1970, 1, 1),
-            next_first_quarter_moon: Date::from_ymd_unchecked(1970, 1, 1),
-            next_last_quarter_moon: Date::from_ymd_unchecked(1970, 1, 1),
+    fn new_sun_info_view() -> Self {
+        Self::SunInfo {
+            day_progress: DayProgress::Night,
+            sunrise_at: MIDNIGHT,
+            sunset_at: MIDNIGHT,
+            sun_pos: Default::default(),
+            datetime: Default::default(),
         }
     }
 
-    fn new_solar_view() -> Self {
-        Self::Solar {
-            now: Default::default(),
-            day_progress: Default::default(),
-            sun_pos: Default::default(),
-            sunrise_at: Time::from_seconds_nanos(0, 0).unwrap(),
-            sunset_at: Time::from_seconds_nanos(0, 0).unwrap(),
+    fn new_moon_info_view() -> Self {
+        Self::MoonInfo {
+            datetime: Default::default(),
+            lunar_phase: Default::default(),
+            lunar_illumination: Default::default(),
+            next_new_moon: D2000,
+            next_full_moon: D2000,
+            next_first_quarter_moon: D2000,
+            next_last_quarter_moon: D2000,
         }
     }
 }
@@ -114,10 +142,10 @@ impl View {
 impl core::fmt::Display for View {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            View::Lunar {
-                now,
-                lunar_illumination,
+            View::MoonInfo {
+                datetime,
                 lunar_phase,
+                lunar_illumination,
                 next_new_moon,
                 next_full_moon,
                 next_first_quarter_moon,
@@ -132,7 +160,7 @@ First quarter  {}
 Full moon      {}
 Last quarter   {}
 "#,
-                    now,
+                    datetime,
                     lunar_phase,
                     lunar_illumination,
                     next_new_moon,
@@ -141,12 +169,13 @@ Last quarter   {}
                     next_last_quarter_moon
                 )
             }
-            View::Solar {
-                now,
+
+            View::SunInfo {
+                datetime,
                 day_progress,
-                sun_pos,
                 sunrise_at,
                 sunset_at,
+                sun_pos,
             } => {
                 write!(
                     f,
@@ -157,61 +186,13 @@ Solar prog.    {}
   Azimuth     {:>6.2} deg
   Altitude    {:>6.2} deg 
 "#,
-                    now, sunrise_at, sunset_at, day_progress, sun_pos.azimuth, sun_pos.altitude
+                    datetime,
+                    sunrise_at,
+                    sunset_at,
+                    day_progress,
+                    sun_pos.azimuth,
+                    sun_pos.altitude
                 )
-            }
-        }
-    }
-}
-
-impl View {
-    fn update(
-        &mut self,
-        sun: &Sun,
-        moon: &Moon,
-        now_local: DateTime,
-        lst_now: (u8, u8, u8),
-        ntp_status: NtpStatus,
-    ) {
-        match self {
-            View::Lunar {
-                now,
-                lunar_phase,
-                lunar_illumination,
-                next_new_moon,
-                next_full_moon,
-                next_first_quarter_moon,
-                next_last_quarter_moon,
-            } => {
-                // lunar phase
-                *lunar_illumination = moon.illumination();
-                *lunar_phase = moon.phase();
-                *next_full_moon = moon.upcoming_full_moon().date;
-                *next_new_moon = moon.upcoming_new_moon().date;
-                *next_first_quarter_moon = moon.upcoming_first_quarter().date;
-                *next_last_quarter_moon = moon.upcoming_last_quarter().date;
-
-                // time now
-                now.update(now_local, lst_now, ntp_status);
-            }
-            View::Solar {
-                now,
-                day_progress,
-                sun_pos,
-                sunrise_at,
-                sunset_at,
-            } => {
-                // sunrise/sunset status
-                let (sunrise, sunset) = (sun.rise_at(), sun.set_at());
-                *sunrise_at = *sunrise;
-                *sunset_at = *sunset;
-
-                // sun position
-                *sun_pos = *sun.pos();
-                *day_progress = sun.day_progress(&now.datetime.time);
-
-                // time now
-                now.update(now_local, lst_now, ntp_status);
             }
         }
     }
@@ -224,7 +205,6 @@ pub struct Ui<'a, DI> {
     text_style: MonoTextStyle<'a, pixelcolor::BinaryColor>,
 }
 
-// TODO: event loop
 impl<'a, DI> Ui<'a, DI>
 where
     DI: display_interface::AsyncWriteOnlyDataCommand,
@@ -237,7 +217,7 @@ where
         )
         .into_buffered_graphics_mode();
 
-        let views = [View::new_solar_view(), View::new_lunar_view()];
+        let views = [View::new_sun_info_view(), View::new_moon_info_view()];
         let view_circulator = Circulator::new(views.len(), 5);
 
         let text_style = MonoTextStyleBuilder::new()
@@ -258,25 +238,11 @@ where
         self
     }
 
-    #[inline]
-    pub fn update_state(
-        &mut self,
-        sun: &Sun,
-        moon: &Moon,
-        now: DateTime,
-        lst: (u8, u8, u8),
-        last_ntp_status: NtpStatus,
-    ) {
-        let cur_view_idx = self.view_looper.next().unwrap();
-        if let Some(view) = self.views.get_mut(cur_view_idx) {
-            view.update(sun, moon, now, lst, last_ntp_status);
-        }
-    }
-
-    pub fn draw(&mut self) -> Result<(), AppError> {
+    fn draw(&mut self) -> Result<(), AppError> {
         self.disp.clear_buffer();
 
-        if let Some(view) = self.views.get(self.view_looper.peek()) {
+        let cur_view_idx = self.view_looper.next().unwrap();
+        if let Some(view) = self.views.get(cur_view_idx) {
             Text::with_baseline(
                 &format!("{}", view),
                 Point::new(0, 0),
@@ -289,8 +255,133 @@ where
         Ok(())
     }
 
-    pub async fn flush(&mut self) {
-        self.disp.flush().await.unwrap();
+    fn update_views(&mut self, cmd: &UpdateCmd) {
+        self.views.iter_mut().for_each(|view| match *cmd {
+            // datetime
+            UpdateCmd::SetDatetime {
+                datetime,
+                lst,
+                last_ntp_status,
+            } => match view {
+                View::MoonInfo { datetime: dt, .. } | View::SunInfo { datetime: dt, .. } => {
+                    dt.update(datetime, lst, last_ntp_status);
+                }
+            },
+
+            // moon infomations
+            UpdateCmd::SetLunar {
+                lunar_phase: phase,
+                lunar_illumination: illumination,
+                next_new_moon: new_moon,
+                next_full_moon: full_moon,
+                next_first_quarter: first_quarter,
+                next_last_quarter: last_quarter,
+            } => {
+                if let View::MoonInfo {
+                    lunar_phase,
+                    lunar_illumination,
+                    next_new_moon,
+                    next_full_moon,
+                    next_first_quarter_moon,
+                    next_last_quarter_moon,
+                    ..
+                } = view
+                {
+                    *lunar_phase = phase;
+                    *lunar_illumination = illumination;
+                    *next_full_moon = full_moon;
+                    *next_new_moon = new_moon;
+                    *next_first_quarter_moon = first_quarter;
+                    *next_last_quarter_moon = last_quarter;
+                }
+            }
+
+            // sun infomations
+            UpdateCmd::SetSolar {
+                day_progress: day_prog,
+                sunrise_at: rise_at,
+                sunset_at: set_at,
+                sun_pos: pos,
+            } => {
+                if let View::SunInfo {
+                    day_progress,
+                    sun_pos,
+                    sunrise_at,
+                    sunset_at,
+                    ..
+                } = view
+                {
+                    *day_progress = day_prog;
+                    *sun_pos = pos;
+                    *sunrise_at = rise_at;
+                    *sunset_at = set_at;
+                }
+            }
+
+            // ignore other commands
+            _ => {}
+        });
+    }
+
+    async fn flush(&mut self) -> Result<(), AppError> {
+        self.draw()?;
+        self.disp.flush().await.map_err(|_| AppError::DrawError)?;
+
+        Ok(())
+    }
+}
+
+pub async fn ui_update(
+    datetime: DateTime,
+    lst: (u8, u8, u8),
+    last_ntp_status: NtpStatus,
+    moon: &Moon,
+    sun: &Sun,
+) {
+    // update datetime status bar
+    UPDATE_CMD_CHAN
+        .send(UpdateCmd::SetDatetime {
+            datetime,
+            lst,
+            last_ntp_status,
+        })
+        .await;
+
+    // update moon info view
+    UPDATE_CMD_CHAN
+        .send(UpdateCmd::SetLunar {
+            lunar_phase: moon.phase(),
+            lunar_illumination: moon.illumination(),
+            next_new_moon: moon.upcoming_new_moon().date,
+            next_full_moon: moon.upcoming_full_moon().date,
+            next_first_quarter: moon.upcoming_first_quarter().date,
+            next_last_quarter: moon.upcoming_last_quarter().date,
+        })
+        .await;
+
+    // update sun info view
+    UPDATE_CMD_CHAN
+        .send(UpdateCmd::SetSolar {
+            day_progress: sun.day_progress(&datetime.time),
+            sunrise_at: sun.rise_at(),
+            sunset_at: sun.set_at(),
+            sun_pos: sun.pos(),
+        })
+        .await;
+
+    // redraw screen
+    UPDATE_CMD_CHAN.send(UpdateCmd::Draw).await;
+}
+
+#[embassy_executor::task]
+pub async fn ui_flush_task(mut ui: Ui<'static, I2CInterface<I2cBusDeviceAsync<'static>>>) {
+    loop {
+        let cmd = UPDATE_CMD_CHAN.receive().await;
+        ui.update_views(&cmd);
+
+        if let UpdateCmd::Draw = cmd {
+            ui.flush().await.unwrap_or_default();
+        }
     }
 }
 
@@ -309,10 +400,6 @@ impl Circulator {
             count: 0,
             period,
         }
-    }
-
-    pub fn peek(&self) -> usize {
-        self.cur_idx
     }
 }
 

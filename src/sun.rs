@@ -5,7 +5,7 @@ use libm::{acos, asin, atan2, cos, sin, sincos, tan};
 
 use crate::{AstronDatetimeExt, DateExt, HorizontalCoordinate, delta_t_2000};
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Copy)]
 pub enum DayProgress {
     /// between 0.0 to 1.0
     Day(f64),
@@ -34,42 +34,33 @@ impl DayProgress {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Sun {
-    rise_at: Time,
-    set_at: Time,
+    /// rise time, seconds since midnight
+    rise_at: u32,
+    /// set time, seconds since midnight
+    set_at: u32,
     pos: HorizontalCoordinate,
     daytime_length: f64,
-}
-
-impl Default for Sun {
-    fn default() -> Self {
-        Self {
-            rise_at: Time::from_seconds_nanos(0, 0).unwrap(),
-            set_at: Time::from_seconds_nanos(0, 0).unwrap(),
-            daytime_length: Default::default(),
-            pos: Default::default(),
-        }
-    }
 }
 
 impl Sun {
     /// sun rise at local time
     #[inline(always)]
-    pub fn rise_at(&self) -> &Time {
-        &self.rise_at
+    pub fn rise_at(&self) -> Time {
+        Time::from_seconds_nanos(self.rise_at, 0).unwrap()
     }
 
     /// sun set at local time
     #[inline(always)]
-    pub fn set_at(&self) -> &Time {
-        &self.set_at
+    pub fn set_at(&self) -> Time {
+        Time::from_seconds_nanos(self.set_at, 0).unwrap()
     }
 
     /// sun current azimuth and altitude are in degrees
     #[inline]
-    pub fn pos(&self) -> &HorizontalCoordinate {
-        &self.pos
+    pub fn pos(&self) -> HorizontalCoordinate {
+        self.pos
     }
 
     pub fn update(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
@@ -82,25 +73,25 @@ impl Sun {
         );
 
         // update state
-        self.rise_at = Time::from_seconds_nanos(sunrise as u32, 0).unwrap();
-        self.set_at = Time::from_seconds_nanos(sunset as u32, 0).unwrap();
+        self.rise_at = sunrise as u32;
+        self.set_at = sunset as u32;
         self.daytime_length = sunset - sunrise;
         self.pos = get_pos(&now.utc, lat, lon).apparent_altitude();
     }
 
     /// daytime progress, `None` if it's after sunset
-    pub fn day_progress(&self, now: &Time) -> DayProgress {
-        let now = now.seconds_since_midnight();
-        let rise_at = self.rise_at.seconds_since_midnight();
-        let set_at = self.set_at.seconds_since_midnight();
+    pub fn day_progress(&self, now_local: &Time) -> DayProgress {
+        let now = now_local.seconds_since_midnight();
 
         // invalid rise/set time or after sunset or before sunrise
-        if set_at < rise_at || set_at < now || rise_at > now {
+        if self.set_at < self.rise_at || self.set_at < now || self.rise_at > now {
             return DayProgress::Night;
         }
 
         // sunrise < now < sunset, so it should be safe to subtract two unsigned integers
-        DayProgress::Day((now.saturating_sub(rise_at) as f64 / self.daytime_length).clamp(0.0, 1.0))
+        DayProgress::Day(
+            (now.saturating_sub(self.rise_at) as f64 / self.daytime_length).clamp(0.0, 1.0),
+        )
     }
 
     // pub fn color_at(&self, t: &Time) -> RGB<u8> {
@@ -151,8 +142,7 @@ fn sunrise_sunset_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f
 
     let lat_rad = lat.to_radians();
     let zenith_angle = 90.8333_f64.to_radians(); // zenith angle in radians
-    let ha_cos =
-        cos(zenith_angle) / (cos(lat_rad) * cos(dec)) - tan(lat_rad) * tan(dec);
+    let ha_cos = cos(zenith_angle) / (cos(lat_rad) * cos(dec)) - tan(lat_rad) * tan(dec);
     let ha = acos(ha_cos).to_degrees(); // hour angle
 
     // UTC time of sunrise and sunset in minutes since midnight

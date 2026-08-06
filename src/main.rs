@@ -9,6 +9,8 @@
 
 use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
+use esp32_sun_info::ui::ui_update;
+use esp32_sun_info::ui::ui_flush_task;
 use esp32_sun_info as lib;
 
 use embassy_time::{Duration, Timer};
@@ -45,11 +47,12 @@ async fn main(spawner: Spawner) -> ! {
     });
 
     // initialise UI, it must run after embassy initialised because it requires await
-    let mut ui = Ui::new(ssd1306::I2CDisplayInterface::new(
+    let ui = Ui::new(ssd1306::I2CDisplayInterface::new(
         shared_bus::asynch::i2c::I2cDevice::new(board.i2c0_bus),
     ))
     .initialise()
     .await;
+    spawner.spawn(ui_flush_task(ui).unwrap());
 
     // sunrise calc
     let tz_offset = UtcOffset::from_hours_minutes(true, 10, 0).unwrap();
@@ -71,22 +74,20 @@ async fn main(spawner: Spawner) -> ! {
             let now_sidereal_local = utc_now.to_sidereal_time_hms(lon);
 
             sun.update(&now, lat, lon);
-            moon.update(&utc_now);
+            moon.update(&now);
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 last_ntp_status = new_ntp_status;
             }
 
-            // ui update
-            ui.update_state(&sun, &moon, now_local, now_sidereal_local, last_ntp_status);
-            ui.draw().unwrap();
-            ui.flush().await;
+            ui_update(now_local, now_sidereal_local, last_ntp_status, &moon, &sun).await;
 
             // LED brightness
             let day_percentage = sun
                 .day_progress(&now_local.time)
                 .to_pwm_duty_cycle_percent();
             board.set_led_brightness(day_percentage);
+
         }
 
         Timer::after(Duration::from_secs(UPDATE_SEC)).await;
