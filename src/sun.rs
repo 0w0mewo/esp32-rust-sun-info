@@ -1,6 +1,6 @@
 use core::f64::consts::TAU;
 use fasttime::{DateTime, OffsetDateTime, Time};
-use libm::{acos, asin, atan2, cos, sin, sincos, tan};
+use libm::{acos, asin, atan2, cos, round, sin, sincos, tan};
 // use smart_leds_trait::RGB;
 
 use crate::{AstronDatetimeExt, DateExt, HorizontalCoordinate, delta_t_2000};
@@ -40,6 +40,10 @@ pub struct Sun {
     rise_at: u32,
     /// set time, seconds since midnight
     set_at: u32,
+    /// dawn time, seconds since midnight
+    dawn_at: u32,
+    /// dusk time, seconds since midnight
+    dusk_at: u32,
     pos: HorizontalCoordinate,
     daytime_length: f64,
 }
@@ -65,16 +69,23 @@ impl Sun {
 
     pub fn update(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
         let (sunrise, sunset) = sunrise_sunset_utc_seconds(&now.utc, lat, lon);
+        let (dawn, dusk) = sundawn_sundusk_utc_seconds(&now.utc, lat, lon);
 
         // convert to seconds since midnight in local time
         let (sunrise, sunset) = (
             sunrise + now.offset.as_seconds() as f64,
             sunset + now.offset.as_seconds() as f64,
         );
+        let (dawn, dusk) = (
+            dawn + now.offset.as_seconds() as f64,
+            dusk + now.offset.as_seconds() as f64,
+        );
 
         // update state
-        self.rise_at = sunrise as u32;
-        self.set_at = sunset as u32;
+        self.rise_at = round(sunrise) as u32;
+        self.set_at = round(sunset) as u32;
+        self.dawn_at = round(dawn) as u32;
+        self.dusk_at = round(dusk) as u32;
         self.daytime_length = sunset - sunrise;
         self.pos = get_pos(&now.utc, lat, lon).apparent_altitude();
     }
@@ -112,8 +123,28 @@ impl Sun {
 
 /// UTC time of sunrise and sunset in seconds since midnight
 /// return in (`sunrise`, `sunset`)
-/// derived from https://gml.noaa.gov/grad/solcalc/solareqns.PDF
 fn sunrise_sunset_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f64) {
+    let (ha, eqtime) = sun_ha_eqtime(now_utc, lat, 90.8333);
+
+    let sunrise = 720.0 - 4.0 * (lon + ha) - eqtime;
+    let sunset = 720.0 - 4.0 * (lon - ha) - eqtime;
+
+    (sunrise * 60.0, sunset * 60.0)
+}
+
+// UTC time of dawn and dusk in minutes since midnight
+/// return in (`dawn`, `dusk`)
+fn sundawn_sundusk_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f64) {
+    let (ha, eqtime) = sun_ha_eqtime(now_utc, lat, 96.0);
+
+    let dawn = 720.0 - 4.0 * (lon + ha) - eqtime;
+    let dusk = 720.0 - 4.0 * (lon - ha) - eqtime;
+
+    (dawn * 60.0, dusk * 60.0)
+}
+
+/// derived from https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+fn sun_ha_eqtime(now_utc: &DateTime, lat: f64, zenith_angle: f64) -> (f64, f64) {
     // fractional year in radians
     let frac_year = {
         let day_of_year = now_utc.date.ordinal() as f64;
@@ -141,15 +172,11 @@ fn sunrise_sunset_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f
         + 0.00148 * triple_frac_year_sin;
 
     let lat_rad = lat.to_radians();
-    let zenith_angle = 90.8333_f64.to_radians(); // zenith angle in radians
-    let ha_cos = cos(zenith_angle) / (cos(lat_rad) * cos(dec)) - tan(lat_rad) * tan(dec);
+    let zenith_angle_rad = zenith_angle.to_radians();
+    let ha_cos = cos(zenith_angle_rad) / (cos(lat_rad) * cos(dec)) - tan(lat_rad) * tan(dec);
     let ha = acos(ha_cos).to_degrees(); // hour angle
 
-    // UTC time of sunrise and sunset in minutes since midnight
-    let sunrise = 720.0 - 4.0 * (lon + ha) - eqtime;
-    let sunset = 720.0 - 4.0 * (lon - ha) - eqtime;
-
-    (sunrise * 60.0, sunset * 60.0)
+    (ha, eqtime)
 }
 
 /// Sun's apparent equatorial coordinates, Meeus ch. 25. d = days since J2000 (TT);
