@@ -224,5 +224,5 @@ fn get_pos(now_utc: &DateTime, lat: f64, lon: f64) -> HorizontalCoordinate {
     let (ra, dec) = sun_coord(jde);
     let hour_angle = local_sidereal_time - ra;
 
-    HorizontalCoordinate::from_equatorial(hour_angle, phi, dec)
+    HorizontalCoordinate::from_equatorial(hour_angle, phi, dec).apparent_altitude()
 }
