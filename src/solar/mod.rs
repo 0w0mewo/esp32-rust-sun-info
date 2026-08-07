@@ -1,5 +1,5 @@
 use fasttime::DateTime;
-use libm::{asin, cos};
+use libm::{asin, cos, fmod};
 
 use crate::{
     AstronDatetimeExt, DateExt, HorizontalCoordinate, delta_t_2000,
@@ -33,9 +33,10 @@ fn get_pos(now_utc: &DateTime, lat: f64, lon: f64, obj: SolarObject) -> Horizont
 
     let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, phi, dec);
     if let SolarObject::Moon = obj {
-        let altitude_geocentric = pos.altitude;
-        pos.altitude =
-            altitude_geocentric - asin(6378.14 / dist * cos(altitude_geocentric.to_radians()));
+        let altitude_geocentric_rad = pos.altitude.to_radians();
+        pos.altitude = (altitude_geocentric_rad
+            - asin(6378.14 / dist * cos(altitude_geocentric_rad)))
+        .to_degrees();
     }
 
     pos.apparent_altitude()
