@@ -1,5 +1,5 @@
 use fasttime::DateTime;
-use libm::{asin, cos, fmod};
+use libm::{asin, cos};
 
 use crate::{
     AstronDatetimeExt, DateExt, HorizontalCoordinate, delta_t_2000,
