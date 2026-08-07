@@ -61,6 +61,18 @@ impl Sun {
         Time::from_seconds_nanos(self.set_at, 0).unwrap()
     }
 
+    /// sun dawn at local time
+    #[inline]
+    pub fn dawn_at(&self) -> Time {
+        Time::from_seconds_nanos(self.dawn_at, 0).unwrap()
+    }
+
+    /// sun dusk at local time
+    #[inline]
+    pub fn dusk_at(&self) -> Time {
+        Time::from_seconds_nanos(self.dusk_at, 0).unwrap()
+    }
+
     /// sun current azimuth and altitude are in degrees
     #[inline]
     pub fn pos(&self) -> HorizontalCoordinate {

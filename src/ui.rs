@@ -36,6 +36,8 @@ enum UpdateCmd {
         day_progress: DayProgress,
         sunrise_at: Time,
         sunset_at: Time,
+        sundawn_at: Time,
+        sundusk_at: Time,
         sun_pos: HorizontalCoordinate,
     },
     Draw,
@@ -102,6 +104,8 @@ enum View {
         day_progress: DayProgress,
         sunrise_at: Time,
         sunset_at: Time,
+        dawn_at: Time,
+        dusk_at: Time,
         sun_pos: HorizontalCoordinate,
     },
     MoonInfo {
@@ -121,6 +125,8 @@ impl View {
             day_progress: DayProgress::Night,
             sunrise_at: MIDNIGHT,
             sunset_at: MIDNIGHT,
+            dawn_at: MIDNIGHT,
+            dusk_at: MIDNIGHT,
             sun_pos: Default::default(),
             datetime: Default::default(),
         }
@@ -175,20 +181,28 @@ Last quarter   {}
                 day_progress,
                 sunrise_at,
                 sunset_at,
+                dawn_at,
+                dusk_at,
                 sun_pos,
             } => {
                 write!(
                     f,
                     r#"{}
-Sunrise        {}
-Sunset         {}
+Dawn {:02}:{:02}     Rise {:02}:{:02}
+Dusk {:02}:{:02}     Set  {:02}:{:02}
 Solar prog.    {}
   Azimuth     {:>6.2} deg
   Altitude    {:>6.2} deg 
 "#,
                     datetime,
-                    sunrise_at,
-                    sunset_at,
+                    dawn_at.hour,
+                    dawn_at.minute,
+                    sunrise_at.hour,
+                    sunrise_at.minute,
+                    dusk_at.hour,
+                    dusk_at.minute,
+                    sunset_at.hour,
+                    sunset_at.minute,
                     day_progress,
                     sun_pos.azimuth,
                     sun_pos.altitude
@@ -301,6 +315,8 @@ where
                 day_progress: day_prog,
                 sunrise_at: rise_at,
                 sunset_at: set_at,
+                sundawn_at,
+                sundusk_at,
                 sun_pos: pos,
             } => {
                 if let View::SunInfo {
@@ -308,6 +324,8 @@ where
                     sun_pos,
                     sunrise_at,
                     sunset_at,
+                    dawn_at,
+                    dusk_at,
                     ..
                 } = view
                 {
@@ -315,6 +333,8 @@ where
                     *sun_pos = pos;
                     *sunrise_at = rise_at;
                     *sunset_at = set_at;
+                    *dawn_at = sundawn_at;
+                    *dusk_at = sundusk_at;
                 }
             }
 
@@ -365,6 +385,8 @@ pub async fn ui_update(
             day_progress: sun.day_progress(&datetime.time),
             sunrise_at: sun.rise_at(),
             sunset_at: sun.set_at(),
+            sundusk_at: sun.dusk_at(),
+            sundawn_at: sun.dawn_at(),
             sun_pos: sun.pos(),
         })
         .await;
