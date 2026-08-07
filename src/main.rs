@@ -9,8 +9,6 @@
 
 use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
-use esp32_sun_info::ui::ui_update;
-use esp32_sun_info::ui::ui_flush_task;
 use esp32_sun_info as lib;
 
 use embassy_time::{Duration, Timer};
@@ -22,9 +20,11 @@ use lib::AstronDatetimeExt;
 use lib::MICROSECS_PER_SEC;
 use lib::board::Board;
 use lib::events::NtpStatus;
-use lib::moon::Moon;
-use lib::sun::Sun;
+use lib::solar::moon::Moon;
+use lib::solar::sun::Sun;
 use lib::ui::Ui;
+use lib::ui::ui_flush_task;
+use lib::ui::ui_update;
 extern crate alloc;
 
 const UPDATE_SEC: u64 = 3;
@@ -87,7 +87,6 @@ async fn main(spawner: Spawner) -> ! {
                 .day_progress(&now_local.time)
                 .to_pwm_duty_cycle_percent();
             board.set_led_brightness(day_percentage);
-
         }
 
         Timer::after(Duration::from_secs(UPDATE_SEC)).await;

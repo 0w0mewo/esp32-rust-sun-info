@@ -1,7 +1,7 @@
 use alloc::rc::Rc;
 use embassy_embedded_hal::shared_bus;
 use embassy_net::StackResources;
-use embassy_sync::blocking_mutex::raw::{NoopRawMutex};
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
@@ -36,7 +36,6 @@ pub type I2cBusDeviceAsync<'a> = shared_bus::asynch::i2c::I2cDevice<'a, NoopRawM
 /// use for abstracted i2c bus device that implemented with `embedded-hal`
 pub type I2cBusDeviceBlocking<'a> =
     shared_bus::blocking::i2c::I2cDevice<'a, NoopRawMutex, I2cType<'a>>;
-
 
 pub struct Board {
     /// shared i2c0 bus with mutex
@@ -261,4 +260,3 @@ async fn wait_networking_ready(net_stack: &embassy_net::Stack<'_>) -> Result<(),
     // all sets
     Ok(())
 }
-

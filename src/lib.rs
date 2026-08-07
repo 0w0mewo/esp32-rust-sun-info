@@ -1,9 +1,8 @@
 #![no_std]
 pub mod board;
 pub mod events;
-pub mod moon;
 pub mod ntp;
-pub mod sun;
+pub mod solar;
 pub mod ui;
 
 pub const MICROSECS_PER_SEC: u64 = 1_000_000;
@@ -50,8 +49,15 @@ pub trait AstronDatetimeExt: DateExt {
     /// convert from julian days to civil datetime
     /// Note: f64 used here because f32 was not precise enough
     fn from_julian(jd: f64) -> Self;
-    /// conver to julian days
+
+    /// convert to julian days
     fn to_julian(&self) -> f64;
+
+    /// convert to julian days epoch since J2000
+    fn to_julian_epoch_2000(&self) -> f64 {
+        self.to_julian() - 2451545.0
+    }
+
     /// local sidereal time in degrees, assume the current datetime is in UT
     fn to_sidereal_time(&self, lon: f64) -> f64 {
         let jd = self.to_julian();
@@ -62,6 +68,7 @@ pub trait AstronDatetimeExt: DateExt {
         let lst = (gmst + lon) % 360.0;
         if lst < 0.0 { lst + 360.0 } else { lst }
     }
+
     /// local sidereal time in HMS, assume the current datetime is in UT
     fn to_sidereal_time_hms(&self, lon: f64) -> (u8, u8, u8) {
         let hr = self.to_sidereal_time(lon) / 15.0;
@@ -77,8 +84,10 @@ pub trait AstronDatetimeExt: DateExt {
 pub trait DateExt {
     /// is the current year leap year
     fn is_leap_year(&self) -> bool;
+
     /// decimal year
     fn decimal_year(&self) -> f64;
+
     /// how many days in the current year, 366 days if it's leap year, 365 days otherwise
     fn days_per_year(&self) -> u16 {
         if self.is_leap_year() { 366 } else { 365 }

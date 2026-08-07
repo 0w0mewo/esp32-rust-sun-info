@@ -1,6 +1,5 @@
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 
-
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NtpStatus {
     OK,

@@ -8,8 +8,9 @@ use ssd1306::{Ssd1306Async, prelude::*};
 
 use crate::board::I2cBusDeviceAsync;
 use crate::events::NtpStatus;
-use crate::moon::{self, Moon};
-use crate::sun::{DayProgress, Sun};
+use crate::solar::moon::Moon;
+use crate::solar::sun::Sun;
+use crate::solar::{moon, sun};
 use crate::{AppError, AstronDatetimeExt, D2000, HorizontalCoordinate, MIDNIGHT, SSD1306};
 
 extern crate alloc;
@@ -33,7 +34,7 @@ enum UpdateCmd {
         next_last_quarter: Date,
     },
     SetSolar {
-        day_progress: DayProgress,
+        day_progress: sun::DayProgress,
         sunrise_at: Time,
         sunset_at: Time,
         sundawn_at: Time,
@@ -104,7 +105,7 @@ Sidereal         {}"#,
 enum View {
     Sun {
         datetime: DatetimeStatus,
-        day_progress: DayProgress,
+        day_progress: sun::DayProgress,
         sunrise_at: Time,
         sunset_at: Time,
         dawn_at: Time,
@@ -129,7 +130,7 @@ enum View {
 impl View {
     fn new_sun_info_view() -> Self {
         Self::Sun {
-            day_progress: DayProgress::Night,
+            day_progress: sun::DayProgress::Night,
             sunrise_at: MIDNIGHT,
             sunset_at: MIDNIGHT,
             dawn_at: MIDNIGHT,
@@ -207,12 +208,7 @@ Sunrise         {}
 Sunet           {}
 Dusk            {} 
 "#,
-                    datetime,
-                    day_progress,
-                    dawn_at,
-                    sunrise_at,
-                    sunset_at,
-                    dusk_at,
+                    datetime, day_progress, dawn_at, sunrise_at, sunset_at, dusk_at,
                 )
             }
 
@@ -295,18 +291,13 @@ where
             // shrink to a smaller font size if the lines exceeded the screen
             self.text_style.font = if s.lines().count() > 8 {
                 &ascii::FONT_5X7
-            }else {
+            } else {
                 &ascii::FONT_5X8
             };
 
-            Text::with_baseline(
-                &s,
-                Point::new(0, 0),
-                self.text_style,
-                Baseline::Top,
-            )
-            .draw(&mut self.disp)
-            .map_err(|_| AppError::DrawError)?;
+            Text::with_baseline(&s, Point::new(0, 0), self.text_style, Baseline::Top)
+                .draw(&mut self.disp)
+                .map_err(|_| AppError::DrawError)?;
         }
         Ok(())
     }

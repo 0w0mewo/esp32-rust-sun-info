@@ -3,7 +3,10 @@ use fasttime::{DateTime, OffsetDateTime, Time};
 use libm::{acos, asin, atan2, cos, round, sin, sincos, tan};
 // use smart_leds_trait::RGB;
 
-use crate::{AstronDatetimeExt, DateExt, HorizontalCoordinate, delta_t_2000};
+use crate::{
+    DateExt, HorizontalCoordinate,
+    solar::{SolarObject, get_pos},
+};
 
 #[derive(Default, Clone, Copy)]
 pub enum DayProgress {
@@ -99,7 +102,7 @@ impl Sun {
         self.dawn_at = round(dawn) as u32;
         self.dusk_at = round(dusk) as u32;
         self.daytime_length = sunset - sunrise;
-        self.pos = get_pos(&now.utc, lat, lon).apparent_altitude();
+        self.pos = get_pos(&now.utc, lat, lon, SolarObject::Sun);
     }
 
     /// daytime progress, `None` if it's after sunset
@@ -194,7 +197,7 @@ fn sun_ha_eqtime(now_utc: &DateTime, lat: f64, zenith_angle: f64) -> (f64, f64) 
 /// Sun's apparent equatorial coordinates, Meeus ch. 25. d = days since J2000 (TT);
 /// return right asc and declination
 /// ported from SunCalc: https://github.com/mourner/suncalc
-fn sun_coord(d: f64) -> (f64, f64) {
+pub(crate) fn sun_coord(d: f64) -> (f64, f64) {
     let t = d / 36525.0; // Julian centuries
     let l0 = (280.46646 + t * (36000.76983 + t * 0.0003032)).to_radians(); // 25.2 geometric mean longitude
     let m = (357.52911 + t * (35999.05029 - t * 0.0001537)).to_radians(); // 25.3 mean anomaly
@@ -211,18 +214,4 @@ fn sun_coord(d: f64) -> (f64, f64) {
     let dec = asin(sin(e) * sin(lon_apparent)); // 25.7
 
     (ra, dec)
-}
-
-/// ported from SunCalc: https://github.com/mourner/suncalc
-fn get_pos(now_utc: &DateTime, lat: f64, lon: f64) -> HorizontalCoordinate {
-    let phi = lat.to_radians();
-    let local_sidereal_time = now_utc.to_sidereal_time(lon).to_radians();
-    let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
-
-    let jde = now_utc.to_julian() - 2451545.0; // Julian days epoch since J2000
-    let jde = jde + dt;
-    let (ra, dec) = sun_coord(jde);
-    let hour_angle = local_sidereal_time - ra;
-
-    HorizontalCoordinate::from_equatorial(hour_angle, phi, dec).apparent_altitude()
 }

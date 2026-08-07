@@ -2,7 +2,10 @@ use core::f64::consts::TAU;
 use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
-use crate::{AstronDatetimeExt, DateExt, HorizontalCoordinate, SECONDS_PER_DAY, delta_t_2000};
+use crate::{
+    AstronDatetimeExt, DateExt, HorizontalCoordinate, SECONDS_PER_DAY, delta_t_2000,
+    solar::{SolarObject, get_pos},
+};
 
 const LUNAR_ORBIT_PERIOD: f64 = 29.530588861;
 
@@ -98,7 +101,7 @@ impl Moon {
         let (age, illumination) = Self::approx_phase(jd_now_utc, jd_last_new_moon);
         self.illumination = illumination * 100.0;
         self.phase = Phase::from_age(age);
-        self.pos = get_pos(now_utc, lat, lon);
+        self.pos = get_pos(now_utc, lat, lon, SolarObject::Moon);
     }
 
     #[inline]
@@ -471,7 +474,7 @@ const MOON_LAT_LUT: [(f64, f64, f64, f64, f64); 60] = [
 /// geocentric apparent equatorial coordinates of the Moon, Meeus ch. 47. jde = days since J2000 (TT).
 /// return right asc and declination in radians, distance in km
 /// ported from SunCalc: https://github.com/mourner/suncalc
-fn moon_coord(jde: f64) -> (f64, f64, f64) {
+pub(crate) fn moon_coord(jde: f64) -> (f64, f64, f64) {
     let t = jde / 36525.0;
     let t2 = t * t;
     let t3 = t2 * t;
@@ -574,23 +577,4 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
     let eps = eps0 + deps;
 
     (dpsi, eps)
-}
-
-/// ported from SunCalc: https://github.com/mourner/suncalc
-fn get_pos(now_utc: &DateTime, lat: f64, lon: f64) -> HorizontalCoordinate {
-    let phi = lat.to_radians();
-    let local_sidereal_time = now_utc.to_sidereal_time(lon).to_radians();
-    let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
-
-    let jde = now_utc.to_julian() - 2451545.0; // Julian days epoch since J2000
-    let jde = jde + dt;
-    let (ra, dec, dist) = moon_coord(jde);
-    let hour_angle = local_sidereal_time - ra;
-
-    let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, phi, dec);
-    let altitude_geocentric = pos.altitude;
-    pos.altitude =
-        altitude_geocentric - asin(6378.14 / dist * cos(altitude_geocentric.to_radians()));
-
-    pos.apparent_altitude()
 }
