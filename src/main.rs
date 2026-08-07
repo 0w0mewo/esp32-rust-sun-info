@@ -74,7 +74,7 @@ async fn main(spawner: Spawner) -> ! {
             let now_sidereal_local = utc_now.to_sidereal_time_hms(lon);
 
             sun.update(&now, lat, lon);
-            moon.update(&now);
+            moon.update(&now, lat, lon);
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 last_ntp_status = new_ntp_status;

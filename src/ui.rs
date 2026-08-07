@@ -38,7 +38,10 @@ enum UpdateCmd {
         sunset_at: Time,
         sundawn_at: Time,
         sundusk_at: Time,
+    },
+    SetPosition {
         sun_pos: HorizontalCoordinate,
+        moon_pos: HorizontalCoordinate,
     },
     Draw,
 }
@@ -99,16 +102,15 @@ Sidereal         {}"#,
 }
 
 enum View {
-    SunInfo {
+    Sun {
         datetime: DatetimeStatus,
         day_progress: DayProgress,
         sunrise_at: Time,
         sunset_at: Time,
         dawn_at: Time,
         dusk_at: Time,
-        sun_pos: HorizontalCoordinate,
     },
-    MoonInfo {
+    Moon {
         datetime: DatetimeStatus,
         lunar_phase: moon::Phase,
         lunar_illumination: f64,
@@ -117,23 +119,27 @@ enum View {
         next_first_quarter_moon: Date,
         next_last_quarter_moon: Date,
     },
+    Position {
+        datetime: DatetimeStatus,
+        sun_pos: HorizontalCoordinate,
+        moon_pos: HorizontalCoordinate,
+    },
 }
 
 impl View {
     fn new_sun_info_view() -> Self {
-        Self::SunInfo {
+        Self::Sun {
             day_progress: DayProgress::Night,
             sunrise_at: MIDNIGHT,
             sunset_at: MIDNIGHT,
             dawn_at: MIDNIGHT,
             dusk_at: MIDNIGHT,
-            sun_pos: Default::default(),
             datetime: Default::default(),
         }
     }
 
     fn new_moon_info_view() -> Self {
-        Self::MoonInfo {
+        Self::Moon {
             datetime: Default::default(),
             lunar_phase: Default::default(),
             lunar_illumination: Default::default(),
@@ -143,12 +149,20 @@ impl View {
             next_last_quarter_moon: D2000,
         }
     }
+
+    fn new_position_info_view() -> Self {
+        Self::Position {
+            datetime: Default::default(),
+            sun_pos: Default::default(),
+            moon_pos: Default::default(),
+        }
+    }
 }
 
 impl core::fmt::Display for View {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            View::MoonInfo {
+            View::Moon {
                 datetime,
                 lunar_phase,
                 lunar_illumination,
@@ -176,36 +190,52 @@ Last quarter   {}
                 )
             }
 
-            View::SunInfo {
+            View::Sun {
                 datetime,
                 day_progress,
                 sunrise_at,
                 sunset_at,
                 dawn_at,
                 dusk_at,
-                sun_pos,
             } => {
                 write!(
                     f,
                     r#"{}
-Dawn {:02}:{:02}     Rise {:02}:{:02}
-Dusk {:02}:{:02}     Set  {:02}:{:02}
-Solar prog.    {}
-  Azimuth     {:>6.2} deg
-  Altitude    {:>6.2} deg 
+Solar prog.     {}
+Dawn            {}
+Sunrise         {}
+Sunet           {}
+Dusk            {} 
 "#,
                     datetime,
-                    dawn_at.hour,
-                    dawn_at.minute,
-                    sunrise_at.hour,
-                    sunrise_at.minute,
-                    dusk_at.hour,
-                    dusk_at.minute,
-                    sunset_at.hour,
-                    sunset_at.minute,
                     day_progress,
+                    dawn_at,
+                    sunrise_at,
+                    sunset_at,
+                    dusk_at,
+                )
+            }
+
+            View::Position {
+                datetime,
+                sun_pos,
+                moon_pos,
+            } => {
+                write!(
+                    f,
+                    r#"{}
+Sun position
+  Azimuth     {:>6.2} deg
+  Altitude    {:>6.2} deg 
+Moon Position
+  Azimuth     {:>6.2} deg
+  Altitude    {:>6.2} deg 
+  "#,
+                    datetime,
                     sun_pos.azimuth,
-                    sun_pos.altitude
+                    sun_pos.altitude,
+                    moon_pos.azimuth,
+                    moon_pos.altitude
                 )
             }
         }
@@ -214,7 +244,7 @@ Solar prog.    {}
 
 pub struct Ui<'a, DI> {
     disp: SSD1306<DI>,
-    views: [View; 2],
+    views: [View; 3],
     view_looper: Circulator,
     text_style: MonoTextStyle<'a, pixelcolor::BinaryColor>,
 }
@@ -231,11 +261,14 @@ where
         )
         .into_buffered_graphics_mode();
 
-        let views = [View::new_sun_info_view(), View::new_moon_info_view()];
+        let views = [
+            View::new_position_info_view(),
+            View::new_sun_info_view(),
+            View::new_moon_info_view(),
+        ];
         let view_circulator = Circulator::new(views.len(), 5);
 
         let text_style = MonoTextStyleBuilder::new()
-            .font(&ascii::FONT_5X8)
             .text_color(pixelcolor::BinaryColor::On)
             .build();
 
@@ -257,8 +290,17 @@ where
 
         let cur_view_idx = self.view_looper.next().unwrap();
         if let Some(view) = self.views.get(cur_view_idx) {
+            let s = format!("{}", view);
+
+            // shrink to a smaller font size if the lines exceeded the screen
+            self.text_style.font = if s.lines().count() > 8 {
+                &ascii::FONT_5X7
+            }else {
+                &ascii::FONT_5X8
+            };
+
             Text::with_baseline(
-                &format!("{}", view),
+                &s,
                 Point::new(0, 0),
                 self.text_style,
                 Baseline::Top,
@@ -277,7 +319,9 @@ where
                 lst,
                 last_ntp_status,
             } => match view {
-                View::MoonInfo { datetime: dt, .. } | View::SunInfo { datetime: dt, .. } => {
+                View::Moon { datetime: dt, .. }
+                | View::Sun { datetime: dt, .. }
+                | View::Position { datetime: dt, .. } => {
                     dt.update(datetime, lst, last_ntp_status);
                 }
             },
@@ -291,7 +335,7 @@ where
                 next_first_quarter: first_quarter,
                 next_last_quarter: last_quarter,
             } => {
-                if let View::MoonInfo {
+                if let View::Moon {
                     lunar_phase,
                     lunar_illumination,
                     next_new_moon,
@@ -317,11 +361,9 @@ where
                 sunset_at: set_at,
                 sundawn_at,
                 sundusk_at,
-                sun_pos: pos,
             } => {
-                if let View::SunInfo {
+                if let View::Sun {
                     day_progress,
-                    sun_pos,
                     sunrise_at,
                     sunset_at,
                     dawn_at,
@@ -330,11 +372,23 @@ where
                 } = view
                 {
                     *day_progress = day_prog;
-                    *sun_pos = pos;
                     *sunrise_at = rise_at;
                     *sunset_at = set_at;
                     *dawn_at = sundawn_at;
                     *dusk_at = sundusk_at;
+                }
+            }
+
+            // sun and moon position
+            UpdateCmd::SetPosition { sun_pos, moon_pos } => {
+                if let View::Position {
+                    sun_pos: s_pos,
+                    moon_pos: m_pos,
+                    ..
+                } = view
+                {
+                    *s_pos = sun_pos;
+                    *m_pos = moon_pos;
                 }
             }
 
@@ -387,7 +441,14 @@ pub async fn ui_update(
             sunset_at: sun.set_at(),
             sundusk_at: sun.dusk_at(),
             sundawn_at: sun.dawn_at(),
+        })
+        .await;
+
+    // update sun and moon position view
+    UPDATE_CMD_CHAN
+        .send(UpdateCmd::SetPosition {
             sun_pos: sun.pos(),
+            moon_pos: moon.pos(),
         })
         .await;
 
