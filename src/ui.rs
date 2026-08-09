@@ -1,8 +1,11 @@
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel;
-use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder, ascii};
+use embedded_graphics::draw_target::DrawTarget;
+use embedded_graphics::geometry::Dimensions;
+use embedded_graphics::mono_font::{MonoTextStyle, ascii};
+use embedded_graphics::primitives::{Circle, Line, PrimitiveStyle, StyledDrawable};
 use embedded_graphics::text::{Baseline, Text};
-use embedded_graphics::{pixelcolor, prelude::Drawable, prelude::Point};
+use embedded_graphics::{pixelcolor, prelude::*};
 use fasttime::{Date, DateTime, Time};
 use ssd1306::{Ssd1306Async, prelude::*};
 
@@ -219,15 +222,23 @@ Dusk            {}
             } => {
                 write!(
                     f,
-                    r#"{}
-Sun position
-  Azimuth     {:>6.2} deg
-  Altitude    {:>6.2} deg 
-Moon Position
-  Azimuth     {:>6.2} deg
-  Altitude    {:>6.2} deg 
+                    r#"JD {:.2}
+LT   {:02}:{:02}:{:02}
+LST  {:02}:{:02}:{:02}
+Sun pos.
+ Az  {:>6.2}
+ Alt {:>6.2}
+Moon pos.
+ Az  {:>6.2} 
+ Alt {:>6.2} 
   "#,
-                    datetime,
+                    datetime.datetime.to_julian(),
+                    datetime.datetime.time.hour,
+                    datetime.datetime.time.minute,
+                    datetime.datetime.time.second,
+                    datetime.lst.0,
+                    datetime.lst.1,
+                    datetime.lst.2,
                     sun_pos.azimuth,
                     sun_pos.altitude,
                     moon_pos.azimuth,
@@ -238,14 +249,17 @@ Moon Position
     }
 }
 
-pub struct Ui<'a, DI> {
+const PRIMITIVE_STYLE_DEFAULT: PrimitiveStyle<pixelcolor::BinaryColor> =
+    PrimitiveStyle::with_stroke(pixelcolor::BinaryColor::On, 1);
+
+pub struct Ui<DI> {
     disp: SSD1306<DI>,
     views: [View; 3],
     view_looper: Circulator,
-    text_style: MonoTextStyle<'a, pixelcolor::BinaryColor>,
+    screen_center: Point,
 }
 
-impl<'a, DI> Ui<'a, DI>
+impl<DI> Ui<DI>
 where
     DI: display_interface::AsyncWriteOnlyDataCommand,
 {
@@ -263,16 +277,13 @@ where
             View::new_moon_info_view(),
         ];
         let view_circulator = Circulator::new(views.len(), 5);
-
-        let text_style = MonoTextStyleBuilder::new()
-            .text_color(pixelcolor::BinaryColor::On)
-            .build();
+        let screen_center = disp.bounding_box().center();
 
         Self {
             disp,
             views,
             view_looper: view_circulator,
-            text_style,
+            screen_center,
         }
     }
 
@@ -286,19 +297,33 @@ where
 
         let cur_view_idx = self.view_looper.next().unwrap();
         if let Some(view) = self.views.get(cur_view_idx) {
-            let s = format!("{}", view);
+            if let View::Position {
+                sun_pos, moon_pos, ..
+            } = view
+            {
+                let center = self.screen_center + Point::new(32, 0);
 
-            // shrink to a smaller font size if the lines exceeded the screen
-            self.text_style.font = if s.lines().count() > 8 {
-                &ascii::FONT_5X7
-            } else {
-                &ascii::FONT_5X8
-            };
+                let compass = Compass::new(center, 64);
+                compass
+                    .draw(&mut self.disp)
+                    .map_err(|_| AppError::DrawError)?;
 
-            Text::with_baseline(&s, Point::new(0, 0), self.text_style, Baseline::Top)
+                // sun and moon azimuths
+                let arm_len = 0.5 * compass.diameter as f64 - 9.0;
+                PolarLine::with_label(compass.center, sun_pos.azimuth, arm_len, "O")
+                    .draw(&mut self.disp)
+                    .map_err(|_| AppError::DrawError)?;
+                PolarLine::with_label(compass.center, moon_pos.azimuth, arm_len, "L")
+                    .draw(&mut self.disp)
+                    .map_err(|_| AppError::DrawError)?;
+            }
+
+            // status info starts from top left
+            CommonStatusTexts::new(Point::zero(), &format!("{}", view))
                 .draw(&mut self.disp)
                 .map_err(|_| AppError::DrawError)?;
         }
+
         Ok(())
     }
 
@@ -448,7 +473,7 @@ pub async fn ui_update(
 }
 
 #[embassy_executor::task]
-pub async fn ui_flush_task(mut ui: Ui<'static, I2CInterface<I2cBusDeviceAsync<'static>>>) {
+pub async fn ui_flush_task(mut ui: Ui<I2CInterface<I2cBusDeviceAsync<'static>>>) {
     loop {
         let cmd = UPDATE_CMD_CHAN.receive().await;
         ui.update_views(&cmd);
@@ -489,4 +514,146 @@ impl Iterator for Circulator {
         self.count += 1;
         Some(self.cur_idx)
     }
+}
+
+/// draw line with polar coordinate
+struct PolarLine<'a> {
+    center: Point,
+    angle: f64,
+    radius: f64,
+    label: Option<&'a str>,
+}
+impl<'a> PolarLine<'a> {
+    fn new(center: Point, angle: f64, radius: f64) -> Self {
+        Self {
+            center,
+            angle,
+            radius,
+            label: None,
+        }
+    }
+
+    fn with_label(center: Point, angle: f64, radius: f64, label: &'a str) -> Self {
+        let mut p = Self::new(center, angle, radius);
+        p.label.replace(label);
+        p
+    }
+}
+
+impl Drawable for PolarLine<'_> {
+    type Color = pixelcolor::BinaryColor;
+
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        let p = polar(self.center, self.angle, self.radius);
+
+        // line
+        Line::new(self.center, p).draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+
+        // label
+        if let Some(label) = self.label {
+            Text::with_baseline(
+                label,
+                p,
+                MonoTextStyle::new(&ascii::FONT_5X7, pixelcolor::BinaryColor::On),
+                Baseline::Middle,
+            )
+            .draw(target)?;
+        } else {
+            Circle::with_center(p, 2).draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+        }
+
+        Ok(())
+    }
+}
+
+/// the status text shared by all views
+struct CommonStatusTexts<'a> {
+    s: &'a str,
+    position: Point,
+}
+
+impl<'a> CommonStatusTexts<'a> {
+    fn new(position: Point, s: &'a str) -> Self {
+        Self { s, position }
+    }
+}
+
+impl Drawable for CommonStatusTexts<'_> {
+    type Color = pixelcolor::BinaryColor;
+
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        // shrink to a smaller font size if the lines exceeded the screen
+        let font = if self.s.lines().count() > 8 {
+            &ascii::FONT_5X7
+        } else {
+            &ascii::FONT_5X8
+        };
+
+        Text::with_baseline(
+            self.s,
+            self.position,
+            MonoTextStyle::new(font, pixelcolor::BinaryColor::On),
+            Baseline::Top,
+        )
+        .draw(target)?;
+
+        Ok(())
+    }
+}
+
+/// compass primitive
+struct Compass {
+    center: Point,
+    diameter: u32,
+}
+
+impl Compass {
+    fn new(center: Point, diameter: u32) -> Self {
+        Self { center, diameter }
+    }
+}
+
+impl Drawable for Compass {
+    type Color = pixelcolor::BinaryColor;
+
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: DrawTarget<Color = Self::Color>,
+    {
+        let face = Circle::with_center(self.center, self.diameter);
+        face.draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+
+        for &(angle, angle_txt) in &[(0.0, "N"), (90.0, "E"), (180.0, "S"), (270.0, "W")] {
+            let pos = polar(self.center, angle, 0.5 * self.diameter as f64 - 4.0);
+            Text::with_baseline(
+                angle_txt,
+                pos,
+                MonoTextStyle::new(&ascii::FONT_4X6, pixelcolor::BinaryColor::On),
+                Baseline::Middle,
+            )
+            .draw(target)?;
+        }
+
+        Ok(())
+    }
+}
+
+/// convert to polar coordinate
+fn polar(center: Point, angle: f64, radius: f64) -> Point {
+    let (angle_sin, angle_cos) = libm::sincos(angle.to_radians());
+
+    let (x, y) = (radius * angle_sin, -radius * angle_cos);
+    center + Point::new(libm::round(x) as i32, libm::round(y) as i32)
 }
