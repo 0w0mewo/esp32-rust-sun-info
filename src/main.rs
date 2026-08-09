@@ -24,7 +24,7 @@ use lib::solar::moon::Moon;
 use lib::solar::sun::Sun;
 use lib::ui::Ui;
 use lib::ui::ui_flush_task;
-use lib::ui::ui_update;
+use lib::ui::{self};
 extern crate alloc;
 
 const UPDATE_SEC: u64 = 3;
@@ -80,7 +80,15 @@ async fn main(spawner: Spawner) -> ! {
                 last_ntp_status = new_ntp_status;
             }
 
-            ui_update(now_local, now_sidereal_local, last_ntp_status, &moon, &sun).await;
+            // update datetime status bar
+            ui::UpdateCmd::notify_new_datetime(now_local, now_sidereal_local, last_ntp_status)
+                .await;
+
+            // update sun and moon states
+            ui::UpdateCmd::notify_new_solar_state(now_local, &sun, &moon).await;
+
+            // flush display
+            ui::UpdateCmd::notify_redraw().await;
 
             // LED brightness
             let day_percentage = sun
