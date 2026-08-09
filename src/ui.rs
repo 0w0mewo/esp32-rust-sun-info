@@ -292,7 +292,7 @@ where
         self
     }
 
-    fn draw(&mut self) -> Result<(), AppError> {
+    fn draw(&mut self) -> Result<(), display_interface::DisplayError> {
         self.disp.clear_buffer();
 
         let cur_view_idx = self.view_looper.next().unwrap();
@@ -304,28 +304,22 @@ where
                 let center = self.screen_center + Point::new(32, 0);
 
                 let compass = Compass::new(center, 64);
-                compass
-                    .draw(&mut self.disp)
-                    .map_err(|_| AppError::DrawError)?;
+                compass.draw(&mut self.disp)?;
 
                 // sun and moon azimuths, draw while it's above horizon
                 let arm_len = 0.5 * compass.diameter as f64 - 9.0;
                 if sun_pos.altitude >= 0.0 {
                     PolarLine::with_label(compass.center, sun_pos.azimuth, arm_len, "O")
-                        .draw(&mut self.disp)
-                        .map_err(|_| AppError::DrawError)?;
+                        .draw(&mut self.disp)?;
                 }
                 if moon_pos.altitude >= 0.0 {
                     PolarLine::with_label(compass.center, moon_pos.azimuth, arm_len, "L")
-                        .draw(&mut self.disp)
-                        .map_err(|_| AppError::DrawError)?;
+                        .draw(&mut self.disp)?;
                 }
             }
 
             // status info starts from top left
-            CommonStatusTexts::new(Point::zero(), &format!("{}", view))
-                .draw(&mut self.disp)
-                .map_err(|_| AppError::DrawError)?;
+            CommonStatusTexts::new(Point::zero(), &format!("{}", view)).draw(&mut self.disp)?;
         }
 
         Ok(())
@@ -418,7 +412,7 @@ where
     }
 
     async fn flush(&mut self) -> Result<(), AppError> {
-        self.draw()?;
+        self.draw().map_err(|_| AppError::DrawError)?;
         self.disp.flush().await.map_err(|_| AppError::DrawError)?;
 
         Ok(())
