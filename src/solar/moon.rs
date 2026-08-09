@@ -7,7 +7,7 @@ use crate::{
     solar::{SolarObject, get_pos},
 };
 
-const LUNAR_ORBIT_PERIOD: f64 = 29.530588861;
+const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;
 
 #[derive(Default, Clone, Copy)]
 pub enum Phase {
@@ -84,7 +84,8 @@ impl Moon {
         let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
 
         // upcoming moon events
-        self.new_moon = upcoming_moon_phase_jd(now_utc, Phase::New) + tz_offset_days;
+        let next_new_moon_jd = upcoming_moon_phase_jd(now_utc, Phase::New); // in UTC
+        self.new_moon = next_new_moon_jd + tz_offset_days;
         self.full_moon = upcoming_moon_phase_jd(now_utc, Phase::Full) + tz_offset_days;
         self.first_quarter = upcoming_moon_phase_jd(now_utc, Phase::FirstQuarter) + tz_offset_days;
         self.last_quarter = upcoming_moon_phase_jd(now_utc, Phase::LastQuarter) + tz_offset_days;
@@ -94,11 +95,11 @@ impl Moon {
         let mut jd_last_new_moon = moon_phase_jd(now_utc.decimal_year(), Phase::New);
         if jd_last_new_moon > jd_now_utc {
             jd_last_new_moon =
-                moon_phase_jd(decimal_year(now_utc, -LUNAR_ORBIT_PERIOD), Phase::New);
+                moon_phase_jd(decimal_year(now_utc, -LUNAR_ORBIT_PERIOD_AVG), Phase::New);
         }
 
         // other stuffs
-        let (age, illumination) = Self::approx_phase(jd_now_utc, jd_last_new_moon);
+        let (age, illumination) = Self::approx_phase(jd_now_utc, jd_last_new_moon, next_new_moon_jd);
         self.illumination = illumination * 100.0;
         self.phase = Phase::from_age(age);
         self.pos = get_pos(now_utc, lat, lon, SolarObject::Moon);
@@ -145,9 +146,11 @@ impl Moon {
     }
 
     // lunar age and illumination
-    fn approx_phase(jd: f64, last_new_moon_jd: f64) -> (f64, f64) {
-        let age = fmod(jd - last_new_moon_jd, LUNAR_ORBIT_PERIOD);
-        let illumination = 0.5 * (1.0 - cos(age * TAU / LUNAR_ORBIT_PERIOD));
+    // TODO: implements with Meeus ch.48
+    fn approx_phase(jd: f64, last_new_moon_jd: f64, next_new_moon_jd: f64) -> (f64, f64) {
+        let lunar_orbit_period = (next_new_moon_jd - last_new_moon_jd).abs();
+        let age = fmod(jd - last_new_moon_jd, lunar_orbit_period);
+        let illumination = 0.5 * (1.0 - cos(age * TAU / lunar_orbit_period));
 
         (age, illumination)
     }
@@ -333,7 +336,7 @@ fn upcoming_moon_phase_jd(now: &DateTime, phase: Phase) -> f64 {
     let jd_now_utc = now.to_julian();
     let mut jd_phase_utc = moon_phase_jd(decimal_year(now, 0.0), phase);
     if jd_now_utc > jd_phase_utc {
-        jd_phase_utc = moon_phase_jd(decimal_year(now, LUNAR_ORBIT_PERIOD), phase);
+        jd_phase_utc = moon_phase_jd(decimal_year(now, LUNAR_ORBIT_PERIOD_AVG), phase);
     }
 
     jd_phase_utc
