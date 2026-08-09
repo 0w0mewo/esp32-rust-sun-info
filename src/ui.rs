@@ -308,14 +308,18 @@ where
                     .draw(&mut self.disp)
                     .map_err(|_| AppError::DrawError)?;
 
-                // sun and moon azimuths
+                // sun and moon azimuths, draw while it's above horizon
                 let arm_len = 0.5 * compass.diameter as f64 - 9.0;
-                PolarLine::with_label(compass.center, sun_pos.azimuth, arm_len, "O")
-                    .draw(&mut self.disp)
-                    .map_err(|_| AppError::DrawError)?;
-                PolarLine::with_label(compass.center, moon_pos.azimuth, arm_len, "L")
-                    .draw(&mut self.disp)
-                    .map_err(|_| AppError::DrawError)?;
+                if sun_pos.altitude >= 0.0 {
+                    PolarLine::with_label(compass.center, sun_pos.azimuth, arm_len, "O")
+                        .draw(&mut self.disp)
+                        .map_err(|_| AppError::DrawError)?;
+                }
+                if moon_pos.altitude >= 0.0 {
+                    PolarLine::with_label(compass.center, moon_pos.azimuth, arm_len, "L")
+                        .draw(&mut self.disp)
+                        .map_err(|_| AppError::DrawError)?;
+                }
             }
 
             // status info starts from top left
