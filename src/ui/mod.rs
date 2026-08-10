@@ -156,6 +156,8 @@ pub enum UpdateCmd {
         sunset_at: Time,
         sundawn_at: Time,
         sundusk_at: Time,
+        sunrise_azim: f64,
+        sunset_azim: f64,
     },
     SetPosition {
         sun_pos: HorizontalCoordinate,
@@ -190,6 +192,8 @@ impl UpdateCmd {
             sunset_at: sun.set_at(),
             sundusk_at: sun.dusk_at(),
             sundawn_at: sun.dawn_at(),
+            sunrise_azim: sun.rise_azimuth(),
+            sunset_azim: sun.set_azimuth(),
         })
         .notify()
         .await;

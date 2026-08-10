@@ -99,7 +99,8 @@ impl Moon {
         }
 
         // other stuffs
-        let (age, illumination) = Self::approx_phase(jd_now_utc, jd_last_new_moon, next_new_moon_jd);
+        let (age, illumination) =
+            Self::approx_phase(jd_now_utc, jd_last_new_moon, next_new_moon_jd);
         self.illumination = illumination * 100.0;
         self.phase = Phase::from_age(age);
         self.pos = get_pos(now_utc, lat, lon, SolarObject::Moon);

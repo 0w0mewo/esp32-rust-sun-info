@@ -4,7 +4,7 @@ use libm::{acos, asin, atan2, cos, round, sin, sincos, tan};
 // use smart_leds_trait::RGB;
 
 use crate::{
-    DateExt, HorizontalCoordinate,
+    DateExt, HorizontalCoordinate, SECONDS_PER_DAY,
     solar::{SolarObject, get_pos},
 };
 
@@ -48,6 +48,8 @@ pub struct Sun {
     /// dusk time, seconds since midnight
     dusk_at: u32,
     pos: HorizontalCoordinate,
+    rise_azim: f64,
+    set_azim: f64,
     daytime_length: f64,
 }
 
@@ -74,6 +76,16 @@ impl Sun {
     #[inline]
     pub fn dusk_at(&self) -> Time {
         Time::from_seconds_nanos(self.dusk_at, 0).unwrap()
+    }
+
+    #[inline]
+    pub fn rise_azimuth(&self) -> f64 {
+        self.rise_azim
+    }
+
+    #[inline]
+    pub fn set_azimuth(&self) -> f64 {
+        self.set_azim
     }
 
     /// sun current azimuth and altitude are in degrees
@@ -103,6 +115,7 @@ impl Sun {
         self.dusk_at = round(dusk) as u32;
         self.daytime_length = sunset - sunrise;
         self.pos = get_pos(&now.utc, lat, lon, SolarObject::Sun);
+        (self.rise_azim, self.set_azim) = sunrise_sunset_azimuth(&now.utc, lat, lon);
     }
 
     /// daytime progress, `None` if it's after sunset
@@ -145,6 +158,31 @@ fn sunrise_sunset_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f
     let sunset = 720.0 - 4.0 * (lon - ha) - eqtime;
 
     (sunrise * 60.0, sunset * 60.0)
+}
+
+/// sunset and sunrise azimuth in degrees
+/// return in (`sunrise`, `sunset`)
+fn sunrise_sunset_azimuth(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f64) {
+    // UTC time in seconds since midnight
+    let (sunrise, sunset) = sunrise_sunset_utc_seconds(now_utc, lat, lon);
+
+    // sunrise and sunset in unix epoch
+    let unix_days_in_secs = now_utc.date.days_since_unix_epoch() as f64 * SECONDS_PER_DAY;
+    let sunrise_unix_utc = round(unix_days_in_secs + sunrise) as i64;
+    let sunset_unix_utc = round(unix_days_in_secs + sunset) as i64;
+
+    // convert to datetime so that it can be passed to `get_pos()`
+    let sunrise = DateTime::from_unix_timestamp(sunrise_unix_utc, 0).unwrap();
+    let sunset = DateTime::from_unix_timestamp(sunset_unix_utc, 0).unwrap();
+
+    let HorizontalCoordinate {
+        azimuth: rise_azim, ..
+    } = get_pos(&sunrise, lat, lon, SolarObject::Sun);
+    let HorizontalCoordinate {
+        azimuth: set_azim, ..
+    } = get_pos(&sunset, lat, lon, SolarObject::Sun);
+
+    (rise_azim, set_azim)
 }
 
 // UTC time of dawn and dusk in minutes since midnight
