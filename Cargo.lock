@@ -554,6 +554,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-graphics-unicodefonts"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a82ef1580d1bff3e89bd3e68069acb24910b66001aaab1738ce9de8d03d2ab1e"
+dependencies = [
+ "embedded-graphics",
+]
+
+[[package]]
 name = "embedded-hal"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -976,6 +985,7 @@ dependencies = [
  "embassy-sync 0.8.0",
  "embassy-time",
  "embedded-graphics",
+ "embedded-graphics-unicodefonts",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",

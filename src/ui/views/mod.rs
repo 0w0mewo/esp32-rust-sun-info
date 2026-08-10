@@ -3,7 +3,7 @@ use crate::{
     events::NtpStatus,
     ui::{
         UpdateCmd, UpdateableFromCmd,
-        components::{CommonStatusTexts, Compass, PolarLine},
+        components::{CommonStatusTexts, Compass, MOON_SYM, PolarLine, SUN_SYM},
     },
 };
 use alloc::format;
@@ -105,11 +105,11 @@ impl Drawable for View {
             // sun and moon azimuths, draw while it's above horizon
             let arm_len = 0.5 * compass.diameter as f64 - 9.0;
             if state.sun_pos.altitude >= 0.0 {
-                PolarLine::with_label(compass.center, state.sun_pos.azimuth, arm_len, "O")
+                PolarLine::with_label(compass.center, state.sun_pos.azimuth, arm_len, SUN_SYM)
                     .draw(target)?;
             }
             if state.moon_pos.altitude >= 0.0 {
-                PolarLine::with_label(compass.center, state.moon_pos.azimuth, arm_len, "L")
+                PolarLine::with_label(compass.center, state.moon_pos.azimuth, arm_len, MOON_SYM)
                     .draw(target)?;
             }
         }

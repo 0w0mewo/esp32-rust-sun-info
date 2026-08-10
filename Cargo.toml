@@ -55,6 +55,7 @@ fasttime = { version = "0.2", default-features = false }
 thiserror = { version = "2.0.19", default-features = false }
 static_cell      = "2.1.1"
 critical-section = "1.2.0"
+embedded-graphics-unicodefonts = "0.2"
 
 # display
 ssd1306 = { version = "0.10.0", features = ["async"] }

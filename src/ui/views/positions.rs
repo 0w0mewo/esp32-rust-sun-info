@@ -2,6 +2,7 @@ use crate::{
     AstronDatetimeExt, HorizontalCoordinate,
     ui::{
         UpdateCmd,
+        components::DEG_SYM,
         views::{DatetimeStatus, UpdateableFromCmd},
     },
 };
@@ -39,11 +40,11 @@ impl core::fmt::Display for State {
 LT   {:02}:{:02}:{:02}
 LST  {:02}:{:02}:{:02}
 Sun pos.
- Az  {:>6.2}
- Alt {:>6.2}
+ Az  {:>6.2}{DEG_SYM} 
+ Alt {:>6.2}{DEG_SYM}
 Moon pos.
- Az  {:>6.2} 
- Alt {:>6.2} 
+ Az  {:>6.2}{DEG_SYM} 
+ Alt {:>6.2}{DEG_SYM}
   "#,
             self.datetime.datetime.to_julian(),
             self.datetime.datetime.time.hour,

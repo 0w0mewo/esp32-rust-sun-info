@@ -1,11 +1,21 @@
 use crate::ui::{PRIMITIVE_STYLE_DEFAULT, polar};
 use embedded_graphics::{
-    mono_font::{MonoTextStyle, ascii},
+    mono_font::MonoTextStyle,
     pixelcolor,
     prelude::*,
     primitives::{Circle, Line, StyledDrawable},
     text::{Baseline, Text},
 };
+use embedded_graphics_unicodefonts::{MONO_4X6, MONO_5X7, MONO_5X8};
+
+/// UTF8 degree symbol
+pub const DEG_SYM: &str = "˚";
+
+/// UTF8 sun symbol
+pub const SUN_SYM: &str = "☼";
+
+/// UTF8 moon symbol
+pub const MOON_SYM: &str = "◦";
 
 /// draw line with polar coordinate
 pub(crate) struct PolarLine<'a> {
@@ -50,7 +60,7 @@ impl Drawable for PolarLine<'_> {
             Text::with_baseline(
                 label,
                 p,
-                MonoTextStyle::new(&ascii::FONT_5X7, pixelcolor::BinaryColor::On),
+                MonoTextStyle::new(&MONO_5X7, pixelcolor::BinaryColor::On),
                 Baseline::Middle,
             )
             .draw(target)?;
@@ -85,9 +95,9 @@ impl Drawable for CommonStatusTexts<'_> {
     {
         // shrink to a smaller font size if the lines exceeded the screen
         let font = if self.s.lines().count() > 8 {
-            &ascii::FONT_5X7
+            &MONO_5X7
         } else {
-            &ascii::FONT_5X8
+            &MONO_5X8
         };
 
         Text::with_baseline(
@@ -131,7 +141,7 @@ impl Drawable for Compass {
             Text::with_baseline(
                 angle_txt,
                 pos,
-                MonoTextStyle::new(&ascii::FONT_4X6, pixelcolor::BinaryColor::On),
+                MonoTextStyle::new(&MONO_4X6, pixelcolor::BinaryColor::On),
                 Baseline::Middle,
             )
             .draw(target)?;

@@ -1,5 +1,4 @@
-use fasttime::Time;
-
+use crate::ui::components::DEG_SYM;
 use crate::{
     MIDNIGHT,
     solar::sun,
@@ -8,6 +7,7 @@ use crate::{
         views::{DatetimeStatus, UpdateableFromCmd},
     },
 };
+use fasttime::Time;
 
 pub struct State {
     pub(in crate::ui::views) datetime: DatetimeStatus,
@@ -72,8 +72,8 @@ impl core::fmt::Display for State {
             r#"{}
 Solar prog.     {}
 Dawn            {}
-Sunrise ({:>3.0})   {}
-Sunet   ({:>3.0})   {}
+Sunrise ({:>3.0}{DEG_SYM})   {}
+Sunet   ({:>3.0}{DEG_SYM})   {}
 Dusk            {} 
 "#,
             self.datetime,
