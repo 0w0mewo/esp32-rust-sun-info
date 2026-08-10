@@ -103,15 +103,26 @@ impl Drawable for View {
             compass.draw(target)?;
 
             // sun and moon azimuths, draw while it's above horizon
-            let arm_len = 0.5 * compass.diameter as f64 - 9.0;
-            if state.sun_pos.altitude >= 0.0 {
-                PolarLine::with_label(compass.center, state.sun_pos.azimuth, arm_len, SUN_SYM)
-                    .draw(target)?;
-            }
-            if state.moon_pos.altitude >= 0.0 {
-                PolarLine::with_label(compass.center, state.moon_pos.azimuth, arm_len, MOON_SYM)
-                    .draw(target)?;
-            }
+            let arm_len = 0.5 * compass.diameter as f64;
+            [&state.sun_pos, &state.moon_pos]
+                .into_iter()
+                .enumerate()
+                .filter(|(_, pos)| pos.altitude >= 0.0)
+                .for_each(|(id, pos)| {
+                    // the closer to zenith, the shorter the arm length
+                    let arm_len = arm_len * (1.0 - (pos.altitude.abs() / 90.0));
+
+                    // select symbol
+                    let symb = match id {
+                        0 => SUN_SYM,
+                        1 => MOON_SYM,
+                        _ => unreachable!(),
+                    };
+
+                    PolarLine::with_label(compass.center, pos.azimuth, arm_len, symb)
+                        .draw(target)
+                        .unwrap_or_default();
+                });
         }
 
         let status_txt = match self {

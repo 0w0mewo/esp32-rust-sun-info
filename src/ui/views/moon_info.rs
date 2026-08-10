@@ -68,7 +68,7 @@ impl core::fmt::Display for State {
         write!(
             f,
             r#"{}
-Lunar phase  {}({:.1} %)
+Lunar phase   {}({:>4.1} %)
 New moon       {}
 First quarter  {}
 Full moon      {}
