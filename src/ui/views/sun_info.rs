@@ -72,8 +72,8 @@ impl core::fmt::Display for State {
             r#"{}
 Solar prog.     {}
 Dawn            {}
-Sunrise ({:>3.0}{DEG_SYM})   {}
-Sunet   ({:>3.0}{DEG_SYM})   {}
+Sunrise ({:>3.0}{DEG_SYM})  {}
+Sunet   ({:>3.0}{DEG_SYM})  {}
 Dusk            {} 
 "#,
             self.datetime,
