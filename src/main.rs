@@ -20,6 +20,7 @@ use lib::AstronDatetimeExt;
 use lib::MICROSECS_PER_SEC;
 use lib::board::Board;
 use lib::events::NtpStatus;
+use lib::solar::PlanetUpdater;
 use lib::solar::moon::Moon;
 use lib::solar::sun::Sun;
 use lib::ui::Ui;
@@ -61,6 +62,10 @@ async fn main(spawner: Spawner) -> ! {
     let (lat, lon) = (LAT, LON);
     let mut last_ntp_status = NtpStatus::default();
 
+    // unix timestamp for the last astronomical events update
+    // Note: set to 0 so that a update always performs at the startup
+    let mut last_astron_update = 0;
+
     loop {
         let rtc_now = board.rtc.current_time_us();
 
@@ -73,8 +78,18 @@ async fn main(spawner: Spawner) -> ! {
             let now_local = now.to_local().unwrap();
             let now_sidereal_local = utc_now.to_sidereal_time_hms(lon);
 
-            sun.update(&now, lat, lon);
-            moon.update(&now, lat, lon);
+            // frequently update sun and moon position
+            sun.update_pos(&now, lat, lon);
+            moon.update_pos(&now, lat, lon);
+
+            // reduce unnecessary computation because astronomical events
+            // do not change in a short time, (update every 10 minutes)
+            if utc_now.unix_timestamp() - last_astron_update > 10 * 60 {
+                sun.update_astron(&now, lat, lon);
+                moon.update_astron(&now, lat, lon);
+                
+                last_astron_update = utc_now.unix_timestamp();
+            }
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 last_ntp_status = new_ntp_status;

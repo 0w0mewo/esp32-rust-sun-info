@@ -1,4 +1,4 @@
-use fasttime::DateTime;
+use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, cos};
 
 use crate::{
@@ -40,4 +40,11 @@ fn get_pos(now_utc: &DateTime, lat: f64, lon: f64, obj: SolarObject) -> Horizont
     }
 
     pos.apparent_altitude()
+}
+
+pub trait PlanetUpdater {
+    /// update horizontal position
+    fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
+    /// update atronomical events, such as rise time, set time, etc
+    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
 }

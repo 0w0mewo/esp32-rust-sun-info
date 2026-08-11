@@ -4,7 +4,7 @@ use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
     AstronDatetimeExt, DateExt, HorizontalCoordinate, SECONDS_PER_DAY, delta_t_2000,
-    solar::{SolarObject, get_pos},
+    solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
 const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;
@@ -77,8 +77,12 @@ fn decimal_year(now: &DateTime, offset: f64) -> f64 {
     (now.date.ordinal() as f64 + offset) / now.days_per_year() as f64 + now.date.year as f64
 }
 
-impl Moon {
-    pub fn update(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
+impl PlanetUpdater for Moon {
+    fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
+        self.pos = get_pos(&now.utc, lat, lon, SolarObject::Moon);
+    }
+
+    fn update_astron(&mut self, now: &OffsetDateTime, _lat: f64, _lon: f64) {
         let now_utc = &now.utc;
         let jd_now_utc = now_utc.to_julian();
         let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
@@ -103,9 +107,10 @@ impl Moon {
             Self::approx_phase(jd_now_utc, jd_last_new_moon, next_new_moon_jd);
         self.illumination = illumination * 100.0;
         self.phase = Phase::from_age(age);
-        self.pos = get_pos(now_utc, lat, lon, SolarObject::Moon);
     }
+}
 
+impl Moon {
     #[inline]
     pub fn phase(&self) -> Phase {
         self.phase
