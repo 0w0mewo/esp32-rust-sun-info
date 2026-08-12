@@ -7,6 +7,8 @@ pub mod ui;
 
 pub const MICROSECS_PER_SEC: u64 = 1_000_000;
 const SECONDS_PER_DAY: f64 = 24.0 * 3600.0;
+pub const J2000: f64 = 2451545.0;
+pub const DAYS_PER_JULIAN_CENTURY: f64 = 36525.0;
 
 pub const D2000: Date = Date::from_ymd_unchecked(2000, 1, 1);
 pub const MIDNIGHT: Time = Time {
@@ -55,15 +57,20 @@ pub trait AstronDatetimeExt: DateExt {
 
     /// convert to julian days epoch since J2000
     fn to_julian_epoch_2000(&self) -> f64 {
-        self.to_julian() - 2451545.0
+        self.to_julian() - J2000
+    }
+
+    /// convert to julian centuries
+    fn to_julian_centuries(&self) -> f64 {
+        self.to_julian() / DAYS_PER_JULIAN_CENTURY
     }
 
     /// local sidereal time in degrees, assume the current datetime is in UT
     fn to_sidereal_time(&self, lon: f64) -> f64 {
-        let jd = self.to_julian();
-        let t = (jd - 2451545.0) / 36525.0;
-        let gmst = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * t * t
-            - (t * t * t) / 38710000.0;
+        let jd = self.to_julian_epoch_2000();
+        let t = jd / DAYS_PER_JULIAN_CENTURY;
+        let gmst =
+            280.46061837 + 360.98564736629 * jd + 0.000387933 * t * t - (t * t * t) / 38710000.0;
 
         let lst = (gmst + lon) % 360.0;
         if lst < 0.0 { lst + 360.0 } else { lst }
