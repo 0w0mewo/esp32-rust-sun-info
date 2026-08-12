@@ -7,6 +7,7 @@
 )]
 // #![deny(clippy::large_stack_frames)]
 
+use alloc::rc::Rc;
 use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
 use esp32_sun_info as lib;
@@ -18,7 +19,7 @@ use esp_println::println;
 use fasttime::{DateTime, OffsetDateTime, UtcOffset};
 use lib::AstronDatetimeExt;
 use lib::MICROSECS_PER_SEC;
-use lib::board::Board;
+use lib::board::{Board, SharedInputType};
 use lib::events::NtpStatus;
 use lib::solar::PlanetUpdater;
 use lib::solar::moon::Moon;
@@ -55,6 +56,10 @@ async fn main(spawner: Spawner) -> ! {
     .await;
     spawner.spawn(ui_flush_task(ui).unwrap());
 
+    // switch UI views by button
+    let btn = Rc::clone(&board.button);
+    spawner.spawn(switch_view(btn).unwrap());
+
     // sunrise calc
     let tz_offset = UtcOffset::from_hours_minutes(true, 10, 0).unwrap();
     let mut sun = Sun::default();
@@ -87,7 +92,7 @@ async fn main(spawner: Spawner) -> ! {
             if utc_now.unix_timestamp() - last_astron_update > 10 * 60 {
                 sun.update_astron(&now, lat, lon);
                 moon.update_astron(&now, lat, lon);
-                
+
                 last_astron_update = utc_now.unix_timestamp();
             }
 
@@ -103,7 +108,7 @@ async fn main(spawner: Spawner) -> ! {
             ui::UpdateCmd::notify_new_solar_state(now_local, &sun, &moon).await;
 
             // flush display
-            ui::UpdateCmd::notify_redraw().await;
+            ui::UpdateCmd::redraw().await;
 
             // LED brightness
             let day_percentage = sun
@@ -113,5 +118,15 @@ async fn main(spawner: Spawner) -> ! {
         }
 
         Timer::after(Duration::from_secs(UPDATE_SEC)).await;
+    }
+}
+
+#[embassy_executor::task]
+async fn switch_view(button: SharedInputType<'static>) {
+    loop {
+        let mut btn = button.lock().await;
+        btn.wait_for_falling_edge().await;
+
+        ui::UpdateCmd::next_view().await;
     }
 }

@@ -43,7 +43,7 @@ where
             View::Moon(Default::default()),
             View::Sun(Default::default()),
         ];
-        let view_circulator = Circulator::new(views.len(), 5);
+        let view_circulator = Circulator::new(views.len());
 
         Self {
             disp,
@@ -60,7 +60,7 @@ where
     fn draw(&mut self) -> Result<(), display_interface::DisplayError> {
         self.disp.clear_buffer();
 
-        let cur_view_idx = self.view_looper.next().unwrap();
+        let cur_view_idx = self.view_looper.peek();
         if let Some(view) = self.views.get(cur_view_idx) {
             view.draw(&mut self.disp)?;
         }
@@ -69,6 +69,10 @@ where
     }
 
     fn update_views(&mut self, cmd: &UpdateCmd) {
+        if let UpdateCmd::SwitchView = cmd {
+            self.view_looper.next();
+        }
+
         self.views.iter_mut().for_each(|v| v.update(cmd));
     }
 
@@ -94,19 +98,16 @@ pub async fn ui_flush_task(mut ui: Ui<I2CInterface<I2cBusDeviceAsync<'static>>>)
 
 struct Circulator {
     cur_idx: usize,
-    count: u8,
-    period: u8,
     end: usize,
 }
 
 impl Circulator {
-    pub fn new(end: usize, period: u8) -> Self {
-        Self {
-            cur_idx: 0,
-            end,
-            count: 0,
-            period,
-        }
+    pub fn new(end: usize) -> Self {
+        Self { cur_idx: 0, end }
+    }
+
+    pub fn peek(&self) -> usize {
+        self.cur_idx
     }
 }
 
@@ -114,12 +115,8 @@ impl Iterator for Circulator {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.count > self.period {
-            self.cur_idx = (self.cur_idx + 1) % self.end;
-            self.count = 0;
-        }
+        self.cur_idx = (self.cur_idx + 1) % self.end;
 
-        self.count += 1;
         Some(self.cur_idx)
     }
 }
@@ -164,6 +161,7 @@ pub enum UpdateCmd {
         moon_pos: HorizontalCoordinate,
     },
     Draw,
+    SwitchView,
 }
 
 impl UpdateCmd {
@@ -223,8 +221,12 @@ impl UpdateCmd {
     }
 
     /// redraw screen
-    pub async fn notify_redraw() {
+    pub async fn redraw() {
         UpdateCmd::Draw.notify().await;
+    }
+
+    pub async fn next_view() {
+        UpdateCmd::SwitchView.notify().await;
     }
 }
 

@@ -24,6 +24,8 @@ use crate::{AppError, rand_u64};
 
 extern crate alloc;
 
+pub type SharedInputType<'a> = Rc<Mutex<NoopRawMutex, gpio::Input<'a>>>;
+
 /// i2c bus type
 pub type I2cType<'a> = i2c::master::I2c<'a, esp_hal::Async>;
 
@@ -45,6 +47,8 @@ pub struct Board {
     led_pwm: ledc::channel::Channel<'static, ledc::LowSpeed>,
     /// network stack
     pub net_stack: embassy_net::Stack<'static>,
+    /// button
+    pub button: SharedInputType<'static>,
 }
 
 impl Board {
@@ -114,6 +118,11 @@ impl Board {
             I2C_BUS.init(Mutex::new(i2c_bus))
         };
 
+        // button
+        let button = Rc::new(Mutex::new(gpio::Input::new(
+            perip.GPIO19,
+            gpio::InputConfig::default().with_pull(gpio::Pull::Up),
+        )));
         // TODO: initialise I2C1 and wrap it as RefCellDevice and pass it around to other i2c based sensors
 
         // setup for embassy
@@ -134,6 +143,7 @@ impl Board {
             led_pwm,
             net_stack,
             i2c0_bus,
+            button,
         }
     }
 
