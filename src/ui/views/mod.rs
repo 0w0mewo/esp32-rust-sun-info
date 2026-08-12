@@ -123,6 +123,15 @@ impl Drawable for View {
                         .draw(target)
                         .unwrap_or_default();
                 });
+
+            // sunrise and sunset azimuth
+            [&state.sunrise_azim, &state.sunset_azim]
+                .into_iter()
+                .for_each(|&az| {
+                    PolarLine::new(compass.center, az, arm_len)
+                        .draw(target)
+                        .unwrap_or_default();
+                });
         }
 
         let status_txt = match self {

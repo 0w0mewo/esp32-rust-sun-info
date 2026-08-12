@@ -12,6 +12,8 @@ pub struct State {
     pub(in crate::ui::views) datetime: DatetimeStatus,
     pub(in crate::ui::views) sun_pos: HorizontalCoordinate,
     pub(in crate::ui::views) moon_pos: HorizontalCoordinate,
+    pub(in crate::ui::views) sunrise_azim: f64,
+    pub(in crate::ui::views) sunset_azim: f64,
 }
 
 impl UpdateableFromCmd for State {
@@ -27,6 +29,16 @@ impl UpdateableFromCmd for State {
                 self.sun_pos = sun_pos;
                 self.moon_pos = moon_pos;
             }
+
+            UpdateCmd::SetSolar {
+                sunrise_azim,
+                sunset_azim,
+                ..
+            } => {
+                self.sunrise_azim = sunrise_azim;
+                self.sunset_azim = sunset_azim;
+            }
+
             _ => {}
         }
     }

@@ -209,9 +209,9 @@ fn sun_ha_eqtime(now_utc: &DateTime, lat: f64, zenith_angle: f64) -> (f64, f64) 
     let frac_year = {
         let day_of_year = now_utc.date.ordinal() as f64;
         let days_per_year = now_utc.days_per_year() as f64;
-        let frac_day = (now_utc.time.hour as f64 - 12.0) / 24.0;
+        let frac_day = now_utc.time.seconds_since_midnight() as f64 / SECONDS_PER_DAY;
 
-        TAU * (day_of_year - 1.0 + frac_day) / days_per_year
+        TAU * (day_of_year - 1.5 + frac_day) / days_per_year
     };
     let (frac_year_sin, frac_year_cos) = sincos(frac_year);
     let (double_frac_year_sin, double_frac_year_cos) = sincos(2.0 * frac_year);
