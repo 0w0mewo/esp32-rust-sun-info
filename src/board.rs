@@ -25,6 +25,9 @@ extern crate alloc;
 // shared GPIO input
 pub type InputType<'a> = Mutex<NoopRawMutex, gpio::Input<'a>>;
 
+// shared GPIO output
+pub type OutputType<'a> = Mutex<NoopRawMutex, gpio::Output<'a>>;
+
 /// i2c bus type
 pub type I2cType<'a> = i2c::master::I2c<'a, esp_hal::Async>;
 
@@ -59,7 +62,8 @@ pub struct Board {
     /// button
     pub button: Rc<InputType<'static>>,
     /// status LED
-    pub status_led: Rc<gpio::Output<'static>>,
+    status_led: Rc<OutputType<'static>>,
+    /// RGB LED
     rgb_led: RgbLedType<'static>,
 }
 
@@ -76,13 +80,13 @@ impl Board {
         rtc.rwdt.disable();
         let rtc = Rc::new(rtc);
 
-        // led pin
+        // led pin, active low
         let status_led = gpio::Output::new(
             perip.GPIO22,
             gpio::Level::Low,
             gpio::OutputConfig::default(),
         );
-        let status_led = Rc::new(status_led);
+        let status_led = Rc::new(Mutex::new(status_led));
 
         // share access i2c0 bus with static lifetime and async feature
         let i2c0_bus = {
@@ -149,9 +153,7 @@ impl Board {
         }
 
         // turn off status LED when connected
-        if let Some(led) = Rc::get_mut(&mut self.status_led) {
-            led.set_high()
-        }
+        self.status_led.lock().await.set_high();
 
         Ok(())
     }
@@ -198,25 +200,22 @@ async fn network_stack_task(mut runner: embassy_net::Runner<'static, wifi::Inter
 async fn ntp_task(
     net_stack: embassy_net::Stack<'static>,
     rtc: Rc<rtc_cntl::Rtc<'static>>,
-    mut status_led: Rc<gpio::Output<'static>>,
+    status_led: Rc<OutputType<'static>>,
 ) {
     wait_networking_ready(&net_stack).await.unwrap();
 
+    // status LED lit when NTP failed
     loop {
         match fetch_timestamp_ntp(net_stack, rtc.current_time_us()).await {
             Ok(ts) => {
                 NtpStatus::OK.notify();
                 rtc.set_current_time_us(ts);
-                if let Some(led) = Rc::get_mut(&mut status_led) {
-                    led.set_high()
-                }
+                status_led.lock().await.set_high();
             }
             Err(e) => {
                 NtpStatus::Err.notify();
-                if let Some(led) = Rc::get_mut(&mut status_led) {
-                    led.set_low()
-                }
                 Timer::after_secs(5).await;
+                status_led.lock().await.set_low();
 
                 println!("NTP error: {}, retrying..", e);
                 continue;
