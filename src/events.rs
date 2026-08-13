@@ -1,4 +1,6 @@
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal,
+};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NtpStatus {
@@ -33,3 +35,24 @@ impl core::fmt::Display for NtpStatus {
         write!(f, "{}", s)
     }
 }
+
+static LED_CMD: Channel<CriticalSectionRawMutex, StatusLedCommand, 2> = Channel::new();
+
+#[derive(Clone, Copy, Default)]
+pub enum StatusLedCommand {
+    On,
+    #[default]
+    Off,
+    Blink(u8),
+}
+
+impl StatusLedCommand {
+    pub async fn notify(&self) {
+        LED_CMD.send(*self).await;
+    }
+
+    pub async fn wait_for() -> StatusLedCommand {
+        LED_CMD.receive().await
+    }
+}
+

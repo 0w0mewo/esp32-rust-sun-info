@@ -16,7 +16,7 @@ use static_cell::StaticCell;
 const SSID: &str = env!("WIFI_SSID");
 const PSWD: &str = env!("WIFI_PSWD");
 
-use crate::events::NtpStatus;
+use crate::events::{StatusLedCommand, NtpStatus};
 use crate::ntp::fetch_timestamp_ntp;
 use crate::{AppError, rand_u64};
 
@@ -61,8 +61,6 @@ pub struct Board {
     pub net_stack: embassy_net::Stack<'static>,
     /// button
     pub button: Rc<InputType<'static>>,
-    /// status LED
-    status_led: Rc<OutputType<'static>>,
     /// RGB LED
     rgb_led: RgbLedType<'static>,
 }
@@ -86,7 +84,7 @@ impl Board {
             gpio::Level::Low,
             gpio::OutputConfig::default(),
         );
-        let status_led = Rc::new(Mutex::new(status_led));
+        spawner.spawn(status_led_task(status_led).unwrap());
 
         // share access i2c0 bus with static lifetime and async feature
         let i2c0_bus = {
@@ -132,7 +130,7 @@ impl Board {
         let net_stack = wifi_setup(perip.WIFI, spawner);
 
         // NTP time sync task
-        spawner.spawn(ntp_task(net_stack, Rc::clone(&rtc), Rc::clone(&status_led)).unwrap());
+        spawner.spawn(ntp_task(net_stack, Rc::clone(&rtc)).unwrap());
 
         Self {
             rtc,
@@ -140,12 +138,13 @@ impl Board {
             i2c0_bus,
             button,
             rgb_led,
-            status_led,
         }
     }
 
     pub async fn init(&mut self) -> Result<(), AppError> {
         // wait for network ready
+        // turn on status LED
+        StatusLedCommand::On.notify().await;
         wait_networking_ready(&self.net_stack).await?;
 
         if let Some(config) = self.net_stack.config_v4() {
@@ -153,8 +152,7 @@ impl Board {
         }
 
         // turn off status LED when connected
-        self.status_led.lock().await.set_high();
-
+        StatusLedCommand::Off.notify().await;
         Ok(())
     }
 
@@ -165,6 +163,26 @@ impl Board {
             .into_future()
             .await
             .unwrap_or_default();
+    }
+}
+
+#[embassy_executor::task]
+async fn status_led_task(mut led: gpio::Output<'static>) {
+    loop {
+        match StatusLedCommand::wait_for().await {
+            StatusLedCommand::On => {
+                led.set_low();
+            }
+            StatusLedCommand::Off => {
+                led.set_high();
+            }
+            StatusLedCommand::Blink(times) => {
+                for _ in 0..times {
+                    led.toggle();
+                    Timer::after_millis(300).await;
+                }
+            }
+        }
     }
 }
 
@@ -197,11 +215,7 @@ async fn network_stack_task(mut runner: embassy_net::Runner<'static, wifi::Inter
 }
 
 #[embassy_executor::task]
-async fn ntp_task(
-    net_stack: embassy_net::Stack<'static>,
-    rtc: Rc<rtc_cntl::Rtc<'static>>,
-    status_led: Rc<OutputType<'static>>,
-) {
+async fn ntp_task(net_stack: embassy_net::Stack<'static>, rtc: Rc<rtc_cntl::Rtc<'static>>) {
     wait_networking_ready(&net_stack).await.unwrap();
 
     // status LED lit when NTP failed
@@ -209,15 +223,15 @@ async fn ntp_task(
         match fetch_timestamp_ntp(net_stack, rtc.current_time_us()).await {
             Ok(ts) => {
                 NtpStatus::OK.notify();
+                StatusLedCommand::Off.notify().await;
                 rtc.set_current_time_us(ts);
-                status_led.lock().await.set_high();
             }
             Err(e) => {
                 NtpStatus::Err.notify();
-                Timer::after_secs(5).await;
-                status_led.lock().await.set_low();
-
+                StatusLedCommand::Blink(5).notify().await;
                 println!("NTP error: {}, retrying..", e);
+
+                Timer::after_secs(5).await;
                 continue;
             }
         }
