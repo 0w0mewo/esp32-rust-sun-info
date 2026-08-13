@@ -10,6 +10,8 @@
 use alloc::rc::Rc;
 use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
+use embassy_time::Instant;
+use esp_hal::gpio;
 use esp32_sun_info as lib;
 
 use embassy_time::{Duration, Timer};
@@ -124,9 +126,31 @@ async fn main(spawner: Spawner) -> ! {
 #[embassy_executor::task]
 async fn switch_view(button: SharedInputType<'static>) {
     loop {
+        // waiting for button pressed
         let mut btn = button.lock().await;
-        btn.wait_for_falling_edge().await;
+        wait_debounced_button(&mut btn).await;
 
+        // switch view
         ui::UpdateCmd::next_view().await;
+    }
+}
+
+/// falling edge triggered button
+async fn wait_debounced_button<'a>(btn: &mut gpio::Input<'a>) {
+    loop {
+        let now = Instant::now();
+
+        btn.wait_for_falling_edge().await;
+        if now.elapsed() < Duration::from_millis(65) {
+            continue;
+        }
+
+        // for unknown reason, it also triggered when rising edge and makes 
+        // the falling edge triggering pointless.
+        // Add an extra check on to ensure it was actually triggered by
+        // falling edge.
+        if btn.is_low() {
+            break;
+        }
     }
 }
