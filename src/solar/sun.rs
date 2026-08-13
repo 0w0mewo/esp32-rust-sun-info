@@ -1,7 +1,7 @@
 use core::f64::consts::TAU;
 use fasttime::{DateTime, OffsetDateTime, Time};
 use libm::{acos, asin, atan2, cos, round, sin, sincos, tan};
-// use smart_leds_trait::RGB;
+use smart_leds::{RGB, RGB8};
 
 use crate::{
     DateExt, HorizontalCoordinate, SECONDS_PER_DAY,
@@ -140,20 +140,20 @@ impl Sun {
         )
     }
 
-    // pub fn color_at(&self, t: &Time) -> RGB<u8> {
-    //     const NOON_COLOR: RGB<f32> = RGB::new(255.0, 254.0, 250.0);
-    //     const END_OF_DAY_COLOR: RGB<f32> = RGB::new(255.0, 166.0, 87.0);
+    pub fn color_at(&self, t: &Time) -> RGB8 {
+        const NOON_COLOR: RGB<f64> = RGB::new(255.0, 254.0, 250.0);
+        const END_OF_DAY_COLOR: RGB<f64> = RGB::new(255.0, 166.0, 87.0);
 
-    //     if let DayProgress::Day(day_progress) = self.day_progress(t) {
-    //         // blend
-    //         let t = ((2.0 * day_progress - 1.0) * (2.0 * day_progress - 1.0)).clamp(0.0, 1.0); // smoother curve and clamp it between 0.0 and 1.0
-    //         let sun_color = NOON_COLOR * (1.0 - t) + END_OF_DAY_COLOR * t;
+        if let DayProgress::Day(day_progress) = self.day_progress(t) {
+            // blend
+            let t = ((2.0 * day_progress - 1.0) * (2.0 * day_progress - 1.0)).clamp(0.0, 1.0); // smoother curve and clamp it between 0.0 and 1.0
+            let sun_color = NOON_COLOR * (1.0 - t) + END_OF_DAY_COLOR * t;
 
-    //         RGB::new(sun_color.r as u8, sun_color.g as u8, sun_color.b as u8)
-    //     } else {
-    //         RGB::new(0, 80, 255) // Moon color
-    //     }
-    // }
+            RGB::new(sun_color.r as u8, sun_color.g as u8, sun_color.b as u8)
+        } else {
+            RGB::new(0, 80, 255) // Moon color
+        }
+    }
 }
 
 /// UTC time of sunrise and sunset in seconds since midnight

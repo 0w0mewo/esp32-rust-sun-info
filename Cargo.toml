@@ -63,7 +63,8 @@ embedded-graphics = "0.8.1"
 display-interface = "0.5.0"
 
 # RGB LED
-#smart-leds-trait = "0.3.2"
+smart-leds = "0.4"
+esp-hal-smartled2 = { version = "0.29", features = ["esp32"] }
 
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.dev]

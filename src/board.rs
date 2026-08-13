@@ -5,14 +5,12 @@ use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
-use esp_hal::i2c;
-use esp_hal::ledc::channel::ChannelIFace;
-use esp_hal::ledc::timer::TimerIFace;
-use esp_hal::{
-    gpio, interrupt::software::SoftwareInterruptControl, ledc, rtc_cntl, time, timer::timg,
-};
+use esp_hal::time::Rate;
+use esp_hal::{gpio, interrupt::software::SoftwareInterruptControl, rtc_cntl, time, timer::timg};
+use esp_hal::{i2c, rmt};
 use esp_println::println;
 use esp_radio::wifi;
+use smart_leds::{RGB8, SmartLedsWriteAsync, brightness, gamma};
 use static_cell::StaticCell;
 
 const SSID: &str = env!("WIFI_SSID");
@@ -24,7 +22,8 @@ use crate::{AppError, rand_u64};
 
 extern crate alloc;
 
-pub type SharedInputType<'a> = Rc<Mutex<NoopRawMutex, gpio::Input<'a>>>;
+// shared GPIO input
+pub type InputType<'a> = Mutex<NoopRawMutex, gpio::Input<'a>>;
 
 /// i2c bus type
 pub type I2cType<'a> = i2c::master::I2c<'a, esp_hal::Async>;
@@ -39,16 +38,29 @@ pub type I2cBusDeviceAsync<'a> = shared_bus::asynch::i2c::I2cDevice<'a, NoopRawM
 pub type I2cBusDeviceBlocking<'a> =
     shared_bus::blocking::i2c::I2cDevice<'a, NoopRawMutex, I2cType<'a>>;
 
+// single RGB led type
+pub type RgbLedType<'a> = esp_hal_smartled::RmtSmartLeds<
+    'a,
+    { esp_hal_smartled::buffer_size::<RGB8>(1) },
+    esp_hal::Async,
+    RGB8,
+    esp_hal_smartled::color_order::Grb,
+>;
+
 pub struct Board {
     /// shared i2c0 bus with mutex
+    /// Note: use reference to I2cBus instead of Rc<I2cBus> here because the embassy_shared_bus
+    /// library required `&'static Mutex` as argument
     pub i2c0_bus: &'static I2cBus<'static>,
     /// rtc share by multiple task, therefore, it should be Rc::clone to pass around instead of borrow
     pub rtc: Rc<rtc_cntl::Rtc<'static>>,
-    led_pwm: ledc::channel::Channel<'static, ledc::LowSpeed>,
     /// network stack
     pub net_stack: embassy_net::Stack<'static>,
     /// button
-    pub button: SharedInputType<'static>,
+    pub button: Rc<InputType<'static>>,
+    /// status LED
+    pub status_led: Rc<gpio::Output<'static>>,
+    rgb_led: RgbLedType<'static>,
 }
 
 impl Board {
@@ -65,43 +77,12 @@ impl Board {
         let rtc = Rc::new(rtc);
 
         // led pin
-        let led = gpio::Output::new(
+        let status_led = gpio::Output::new(
             perip.GPIO22,
-            gpio::Level::High,
+            gpio::Level::Low,
             gpio::OutputConfig::default(),
         );
-
-        // led pwm with LEDC
-        let mut ledc = ledc::Ledc::new(perip.LEDC);
-        ledc.set_global_slow_clock(ledc::LSGlobalClkSource::APBClk); // use slow clock source for ledc
-
-        // config lowspeed timer 0 for ledc clock source,
-        // it requires static lifetime because ledc channel config require reference to the lstimer0 instance instead of move
-        let lstimer0_ref = {
-            static LS_TIMER: StaticCell<ledc::timer::Timer<'_, ledc::LowSpeed>> = StaticCell::new();
-            LS_TIMER.init_with(|| {
-                let mut lstimer0 = ledc.timer::<ledc::LowSpeed>(ledc::timer::Number::Timer0);
-                lstimer0
-                    .configure(ledc::timer::config::Config {
-                        duty: ledc::timer::config::Duty::Duty12Bit,
-                        clock_source: ledc::timer::LSClockSource::APBClk,
-                        frequency: time::Rate::from_khz(10),
-                    })
-                    .unwrap();
-
-                lstimer0
-            })
-        };
-
-        // config ledc channel 0 to use the `led` pin as pwm signal output and use lstimer0 as clock source
-        let mut led_pwm = ledc.channel(ledc::channel::Number::Channel0, led);
-        led_pwm
-            .configure(ledc::channel::config::Config {
-                timer: lstimer0_ref,
-                duty_pct: 0,
-                drive_mode: gpio::DriveMode::OpenDrain,
-            })
-            .unwrap();
+        let status_led = Rc::new(status_led);
 
         // share access i2c0 bus with static lifetime and async feature
         let i2c0_bus = {
@@ -118,11 +99,23 @@ impl Board {
             I2C_BUS.init(Mutex::new(i2c_bus))
         };
 
+        // RGB led
+        let rmt = rmt::Rmt::new(perip.RMT, Rate::from_mhz(80))
+            .unwrap()
+            .into_async();
+        let rgb_led = esp_hal_smartled::RmtSmartLeds::new(
+            esp_hal_smartled::WS2812B_TIMING,
+            rmt.channel0,
+            perip.GPIO33,
+        )
+        .unwrap();
+
         // button
-        let button = Rc::new(Mutex::new(gpio::Input::new(
+        let button = Mutex::new(gpio::Input::new(
             perip.GPIO19,
             gpio::InputConfig::default().with_pull(gpio::Pull::Up),
-        )));
+        ));
+        let button = Rc::new(button);
         // TODO: initialise I2C1 and wrap it as RefCellDevice and pass it around to other i2c based sensors
 
         // setup for embassy
@@ -135,15 +128,15 @@ impl Board {
         let net_stack = wifi_setup(perip.WIFI, spawner);
 
         // NTP time sync task
-        let rtc_clone = Rc::clone(&rtc);
-        spawner.spawn(ntp_task(net_stack, rtc_clone).unwrap());
+        spawner.spawn(ntp_task(net_stack, Rc::clone(&rtc), Rc::clone(&status_led)).unwrap());
 
         Self {
             rtc,
-            led_pwm,
             net_stack,
             i2c0_bus,
             button,
+            rgb_led,
+            status_led,
         }
     }
 
@@ -155,14 +148,21 @@ impl Board {
             println!("Got IP address: {}", config.address);
         }
 
+        // turn off status LED when connected
+        if let Some(led) = Rc::get_mut(&mut self.status_led) {
+            led.set_high()
+        }
+
         Ok(())
     }
 
     #[inline]
-    pub fn set_led_brightness(&mut self, brightness: u8) {
-        let brightness = brightness.clamp(0, 100);
-
-        self.led_pwm.set_duty(brightness).unwrap();
+    pub async fn set_rgb_led_color(&mut self, color: RGB8, b: u8) {
+        self.rgb_led
+            .write(brightness(gamma([color].into_iter()), b))
+            .into_future()
+            .await
+            .unwrap_or_default();
     }
 }
 
@@ -195,7 +195,11 @@ async fn network_stack_task(mut runner: embassy_net::Runner<'static, wifi::Inter
 }
 
 #[embassy_executor::task]
-async fn ntp_task(net_stack: embassy_net::Stack<'static>, rtc: Rc<rtc_cntl::Rtc<'static>>) {
+async fn ntp_task(
+    net_stack: embassy_net::Stack<'static>,
+    rtc: Rc<rtc_cntl::Rtc<'static>>,
+    mut status_led: Rc<gpio::Output<'static>>,
+) {
     wait_networking_ready(&net_stack).await.unwrap();
 
     loop {
@@ -203,9 +207,15 @@ async fn ntp_task(net_stack: embassy_net::Stack<'static>, rtc: Rc<rtc_cntl::Rtc<
             Ok(ts) => {
                 NtpStatus::OK.notify();
                 rtc.set_current_time_us(ts);
+                if let Some(led) = Rc::get_mut(&mut status_led) {
+                    led.set_high()
+                }
             }
             Err(e) => {
                 NtpStatus::Err.notify();
+                if let Some(led) = Rc::get_mut(&mut status_led) {
+                    led.set_low()
+                }
                 Timer::after_secs(5).await;
 
                 println!("NTP error: {}, retrying..", e);

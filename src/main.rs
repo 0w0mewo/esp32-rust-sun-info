@@ -21,7 +21,7 @@ use esp_println::println;
 use fasttime::{DateTime, OffsetDateTime, UtcOffset};
 use lib::AstronDatetimeExt;
 use lib::MICROSECS_PER_SEC;
-use lib::board::{Board, SharedInputType};
+use lib::board::{Board, InputType};
 use lib::events::NtpStatus;
 use lib::solar::PlanetUpdater;
 use lib::solar::moon::Moon;
@@ -59,8 +59,7 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(ui_flush_task(ui).unwrap());
 
     // switch UI views by button
-    let btn = Rc::clone(&board.button);
-    spawner.spawn(switch_view(btn).unwrap());
+    spawner.spawn(switch_view(board.button.clone()).unwrap());
 
     // sunrise calc
     let tz_offset = UtcOffset::from_hours_minutes(true, 10, 0).unwrap();
@@ -112,11 +111,13 @@ async fn main(spawner: Spawner) -> ! {
             // flush display
             ui::UpdateCmd::redraw().await;
 
-            // LED brightness
+            // RGB LED color as sun color
+            // LED brightness as day progress
             let day_percentage = sun
                 .day_progress(&now_local.time)
                 .to_pwm_duty_cycle_percent();
-            board.set_led_brightness(day_percentage);
+            let sun_color = sun.color_at(&now_local.time);
+            board.set_rgb_led_color(sun_color, day_percentage).await;
         }
 
         Timer::after(Duration::from_secs(UPDATE_SEC)).await;
@@ -124,7 +125,7 @@ async fn main(spawner: Spawner) -> ! {
 }
 
 #[embassy_executor::task]
-async fn switch_view(button: SharedInputType<'static>) {
+async fn switch_view(button: Rc<InputType<'static>>) {
     loop {
         // waiting for button pressed
         let mut btn = button.lock().await;
@@ -145,7 +146,7 @@ async fn wait_debounced_button<'a>(btn: &mut gpio::Input<'a>) {
             continue;
         }
 
-        // for unknown reason, it also triggered when rising edge and makes 
+        // for unknown reason, it also triggered when rising edge and makes
         // the falling edge triggering pointless.
         // Add an extra check on to ensure it was actually triggered by
         // falling edge.
