@@ -50,12 +50,13 @@ async fn main(spawner: Spawner) -> ! {
         system::software_reset();
     });
 
+    // create an compatible embedded_hal_async::i2c::I2c instance because the ssd1306 driver needs it
+    let i2c_dev_ssd1306 = shared_bus::asynch::i2c::I2cDevice::new(board.i2c0_bus);
+
     // initialise UI, it must run after embassy initialised because it requires await
-    let ui = Ui::new(ssd1306::I2CDisplayInterface::new(
-        shared_bus::asynch::i2c::I2cDevice::new(board.i2c0_bus),
-    ))
-    .initialise()
-    .await;
+    let ui = Ui::new(ssd1306::I2CDisplayInterface::new(i2c_dev_ssd1306))
+        .initialise()
+        .await;
     spawner.spawn(ui_flush_task(ui).unwrap());
 
     // switch UI views by button
