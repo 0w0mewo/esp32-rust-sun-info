@@ -15,8 +15,6 @@ pub struct State {
     pub(in crate::ui::views) lunar_illumination: f64,
     pub(in crate::ui::views) next_new_moon: Date,
     pub(in crate::ui::views) next_full_moon: Date,
-    pub(in crate::ui::views) next_first_quarter_moon: Date,
-    pub(in crate::ui::views) next_last_quarter_moon: Date,
 }
 
 impl UpdateableFromCmd for State {
@@ -33,15 +31,11 @@ impl UpdateableFromCmd for State {
                 lunar_illumination,
                 next_new_moon,
                 next_full_moon,
-                next_first_quarter,
-                next_last_quarter,
             } => {
                 self.lunar_phase = lunar_phase;
                 self.lunar_illumination = lunar_illumination;
                 self.next_full_moon = next_full_moon;
                 self.next_new_moon = next_new_moon;
-                self.next_first_quarter_moon = next_first_quarter;
-                self.next_last_quarter_moon = next_last_quarter;
             }
 
             _ => (),
@@ -57,8 +51,6 @@ impl Default for State {
             lunar_illumination: Default::default(),
             next_new_moon: D2000,
             next_full_moon: D2000,
-            next_first_quarter_moon: D2000,
-            next_last_quarter_moon: D2000,
         }
     }
 }
@@ -70,17 +62,13 @@ impl core::fmt::Display for State {
             r#"{}
 Lunar phase   {}({:>4.1} %)
 New moon       {}
-First quarter  {}
 Full moon      {}
-Last quarter   {}
 "#,
             self.datetime,
             self.lunar_phase,
             self.lunar_illumination,
             self.next_new_moon,
-            self.next_first_quarter_moon,
             self.next_full_moon,
-            self.next_last_quarter_moon
         )
     }
 }

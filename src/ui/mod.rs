@@ -1,3 +1,4 @@
+use embassy_net::Ipv4Cidr;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel;
 use embedded_graphics::primitives::PrimitiveStyle;
@@ -13,6 +14,7 @@ use crate::ui::views::View;
 use crate::{AppError, HorizontalCoordinate, SSD1306};
 
 extern crate alloc;
+use alloc::string::String;
 
 mod components;
 mod views;
@@ -22,7 +24,7 @@ pub(crate) const PRIMITIVE_STYLE_DEFAULT: PrimitiveStyle<pixelcolor::BinaryColor
 
 pub struct Ui<DI> {
     disp: SSD1306<DI>,
-    views: [View; 3],
+    views: [View; 4],
     view_looper: Circulator,
 }
 
@@ -42,6 +44,7 @@ where
             View::Position(Default::default()),
             View::Moon(Default::default()),
             View::Sun(Default::default()),
+            View::Status(Default::default()),
         ];
         let view_circulator = Circulator::new(views.len());
 
@@ -144,8 +147,6 @@ pub enum UpdateCmd {
         lunar_illumination: f64,
         next_new_moon: Date,
         next_full_moon: Date,
-        next_first_quarter: Date,
-        next_last_quarter: Date,
     },
     SetSolar {
         day_progress: sun::DayProgress,
@@ -160,6 +161,8 @@ pub enum UpdateCmd {
         sun_pos: HorizontalCoordinate,
         moon_pos: HorizontalCoordinate,
     },
+    SetIpStatus(Ipv4Cidr),
+    SetApStatus(String),
     Draw,
     SwitchView,
 }
@@ -167,6 +170,14 @@ pub enum UpdateCmd {
 impl UpdateCmd {
     pub async fn notify(self) {
         UPDATE_CMD_CHAN.send(self).await
+    }
+
+    pub async fn notify_new_ip_address(ip_addr: Ipv4Cidr) {
+        UpdateCmd::SetIpStatus(ip_addr).notify().await
+    }
+
+    pub async fn notifiy_new_ap_name(connected_ap: &str) {
+        UpdateCmd::SetApStatus(connected_ap.into()).notify().await
     }
 
     /// push new datetime, sun and moon state to UI
@@ -177,8 +188,6 @@ impl UpdateCmd {
             lunar_illumination: moon.illumination(),
             next_new_moon: moon.upcoming_new_moon().date,
             next_full_moon: moon.upcoming_full_moon().date,
-            next_first_quarter: moon.upcoming_first_quarter().date,
-            next_last_quarter: moon.upcoming_last_quarter().date,
         })
         .notify()
         .await;

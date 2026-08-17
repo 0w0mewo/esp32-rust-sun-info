@@ -44,6 +44,8 @@ embassy-net = { version = "0.9.1", features = [
   "udp",
 #  "tcp",
   "dns",
+  "icmp",
+  "auto-icmp-echo-reply"
 ] }
 
 # networking application

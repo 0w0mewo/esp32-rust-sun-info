@@ -64,10 +64,6 @@ pub struct Moon {
     new_moon: f64,
     /// local JD of upcoming full moon
     full_moon: f64,
-    /// local JD of upcoming first quarter
-    first_quarter: f64,
-    /// local JD of upcoming last quarter
-    last_quarter: f64,
     pos: HorizontalCoordinate,
 }
 
@@ -91,8 +87,6 @@ impl PlanetUpdater for Moon {
         let next_new_moon_jd = upcoming_moon_phase_jd(now_utc, Phase::New); // in UTC
         self.new_moon = next_new_moon_jd + tz_offset_days;
         self.full_moon = upcoming_moon_phase_jd(now_utc, Phase::Full) + tz_offset_days;
-        self.first_quarter = upcoming_moon_phase_jd(now_utc, Phase::FirstQuarter) + tz_offset_days;
-        self.last_quarter = upcoming_moon_phase_jd(now_utc, Phase::LastQuarter) + tz_offset_days;
 
         // find the Julian days of last new moon,
         // push back one lunar period and re-calculate it if the day is in the future.
@@ -131,18 +125,6 @@ impl Moon {
     /// upcoming full moon in local time
     pub fn upcoming_full_moon(&self) -> DateTime {
         DateTime::from_julian(self.full_moon)
-    }
-
-    #[inline]
-    /// upcoming first quarter in local time
-    pub fn upcoming_first_quarter(&self) -> DateTime {
-        DateTime::from_julian(self.first_quarter)
-    }
-
-    #[inline]
-    /// upcoming last quarter in local time
-    pub fn upcoming_last_quarter(&self) -> DateTime {
-        DateTime::from_julian(self.last_quarter)
     }
 
     #[inline]

@@ -12,6 +12,7 @@ use fasttime::DateTime;
 
 mod moon_info;
 mod positions;
+mod status;
 mod sun_info;
 
 extern crate alloc;
@@ -75,6 +76,7 @@ pub enum View {
     Sun(sun_info::State),
     Moon(moon_info::State),
     Position(positions::State),
+    Status(status::State),
 }
 
 impl UpdateableFromCmd for View {
@@ -83,6 +85,7 @@ impl UpdateableFromCmd for View {
             Self::Moon(state) => state.update(cmd),
             Self::Position(state) => state.update(cmd),
             Self::Sun(state) => state.update(cmd),
+            Self::Status(state) => state.update(cmd),
         }
     }
 }
@@ -138,6 +141,7 @@ impl Drawable for View {
             Self::Moon(state) => format!("{}", state),
             Self::Position(state) => format!("{}", state),
             Self::Sun(state) => format!("{}", state),
+            Self::Status(state) => format!("{}", state),
         };
 
         CommonStatusTexts::new(Point::zero(), &status_txt).draw(target)?;

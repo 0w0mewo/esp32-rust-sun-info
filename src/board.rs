@@ -18,6 +18,7 @@ const PSWD: &str = env!("WIFI_PSWD");
 
 use crate::events::{NtpStatus, StatusLedCommand};
 use crate::ntp::fetch_timestamp_ntp;
+use crate::ui::{self};
 use crate::{AppError, rand_u64};
 
 extern crate alloc;
@@ -148,7 +149,7 @@ impl Board {
         wait_networking_ready(&self.net_stack).await?;
 
         if let Some(config) = self.net_stack.config_v4() {
-            println!("Got IP address: {}", config.address);
+            ui::UpdateCmd::notify_new_ip_address(config.address).await;
         }
 
         // turn off status LED when connected
@@ -191,18 +192,25 @@ async fn wifi_connection_task(mut controller: wifi::WifiController<'static>) {
     'connect: loop {
         match controller.connect_async().await {
             Ok(info) => {
-                println!("Wifi connected to {}", info.ssid.as_str());
+                ui::UpdateCmd::SetApStatus(info.ssid.as_str().into())
+                    .notify()
+                    .await;
 
                 // wait until we're no longer connected
                 if let Ok(info) = controller.wait_for_disconnect_async().await {
-                    println!("Wifi disconnected from {}", info.ssid.as_str());
+                    ui::UpdateCmd::SetApStatus(alloc::format!(
+                        "Disconnected from: \n{}",
+                        info.ssid.as_str()
+                    ))
+                    .notify()
+                    .await;
                 }
 
                 // this will reconnect after disconnect
                 continue 'connect;
             }
-            Err(e) => {
-                println!("Failed to connect to wifi: {e:?}");
+            Err(_) => {
+                ui::UpdateCmd::SetApStatus("Failed".into()).notify().await;
             }
         }
 
