@@ -1,9 +1,9 @@
 use core::f64::consts::TAU;
-use fasttime::{DateTime, OffsetDateTime};
-use libm::{asin, atan2, cos, floor, fmod, sin, tan};
+use fasttime::{DateTime, OffsetDateTime, Time};
+use libm::{acos, asin, atan2, cos, floor, fmod, round, sin, tan};
 
 use crate::{
-    AstronDatetimeExt, DateExt, HorizontalCoordinate, SECONDS_PER_DAY, delta_t_2000,
+    AstronDatetimeExt, DateExt, HorizontalCoordinate, MIDNIGHT, SECONDS_PER_DAY, delta_t_2000,
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
@@ -64,6 +64,10 @@ pub struct Moon {
     new_moon: f64,
     /// local JD of upcoming full moon
     full_moon: f64,
+    /// moonrise in local time, seconds since midnight
+    moonrise: u32,
+    /// moonset in localtime, seconds since midnight
+    moonset: u32,
     pos: HorizontalCoordinate,
 }
 
@@ -78,10 +82,11 @@ impl PlanetUpdater for Moon {
         self.pos = get_pos(&now.utc, lat, lon, SolarObject::Moon);
     }
 
-    fn update_astron(&mut self, now: &OffsetDateTime, _lat: f64, _lon: f64) {
+    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
         let now_utc = &now.utc;
         let jd_now_utc = now_utc.to_julian();
-        let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
+        let tz_offset_sec = now.offset.as_seconds() as f64;
+        let tz_offset_days = tz_offset_sec / SECONDS_PER_DAY;
 
         // upcoming moon events
         let next_new_moon_jd = upcoming_moon_phase_jd(now_utc, Phase::New); // in UTC
@@ -95,6 +100,13 @@ impl PlanetUpdater for Moon {
             jd_last_new_moon =
                 moon_phase_jd(decimal_year(now_utc, -LUNAR_ORBIT_PERIOD_AVG), Phase::New);
         }
+
+        // moonrise and moonset
+        let (rise_utc_secs, set_utc_secs) = moon_rise_set(now_utc, lat, lon).unwrap_or_default();
+        let (rise_local_secs, set_local_secs) =
+            (rise_utc_secs + tz_offset_sec, set_utc_secs + tz_offset_sec);
+        self.moonrise = round(rise_local_secs % SECONDS_PER_DAY) as u32;
+        self.moonset = round(set_local_secs % SECONDS_PER_DAY) as u32;
 
         // other stuffs
         let (age, illumination) =
@@ -131,6 +143,18 @@ impl Moon {
     /// moon current azimuth and altitude are in degrees
     pub fn pos(&self) -> HorizontalCoordinate {
         self.pos
+    }
+
+    #[inline]
+    /// moon rise in local time
+    pub fn rise_at(&self) -> Time {
+        Time::from_seconds_nanos(self.moonrise, 0).unwrap_or(MIDNIGHT)
+    }
+
+    #[inline]
+    /// moon set in local time
+    pub fn set_at(&self) -> Time {
+        Time::from_seconds_nanos(self.moonset, 0).unwrap_or(MIDNIGHT)
     }
 
     // lunar age and illumination
@@ -568,4 +592,47 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
     let eps = eps0 + deps;
 
     (dpsi, eps)
+}
+
+/// return None if there is no rise/set
+/// otherwise return rise and set time in UTC seconds since midnight
+fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
+    let h0_rad = (0.125_f64).to_radians();
+    let lat_rad = lat.to_radians();
+    let lst0_rad = now_utc.date.to_sidereal_time(lon).to_radians(); // local sidereal time at 0h
+
+    // current apparent equatorial coordinates of moon
+    let jde = now_utc.to_julian_epoch_2000() + delta_t_2000(now_utc.decimal_year());
+    let (ra_rad, dec_rad, _) = moon_coord(jde);
+
+    // Meeus, ch 15.1
+    let cos_h = (sin(h0_rad) - sin(lat_rad) * sin(dec_rad)) / (cos(lat_rad) * cos(dec_rad));
+    if !(-1.0..=1.0).contains(&cos_h) {
+        return None;
+    }
+    let h_rad = acos(cos_h);
+
+    // Meeus, ch 15.2
+    // Note: the longitude in the original formula is east negative while west negative is used here.
+    // Therefore, `ra + L - GMST0` becomes `ra - L - GMST0` which is resulting `ra - (L + GMST0)`, that is,
+    // `ra - LST0`
+    let transit = (ra_rad - lst0_rad) / TAU;
+    let m_rise = transit - h_rad / TAU;
+    let m_set = transit + h_rad / TAU;
+
+    let rise = SECONDS_PER_DAY * wrap1(m_rise);
+    let set = SECONDS_PER_DAY * wrap1(m_set);
+
+    Some((rise, set))
+}
+
+fn wrap1(mut m: f64) -> f64 {
+    while m < 0.0 {
+        m += 1.0;
+    }
+    while m > 1.0 {
+        m -= 1.0;
+    }
+
+    m
 }

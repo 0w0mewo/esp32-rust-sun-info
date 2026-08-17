@@ -1,7 +1,7 @@
-use fasttime::Date;
+use fasttime::{Date, Time};
 
 use crate::{
-    D2000,
+    D2000, MIDNIGHT,
     solar::moon,
     ui::{
         UpdateCmd,
@@ -15,6 +15,8 @@ pub struct State {
     pub(in crate::ui::views) lunar_illumination: f64,
     pub(in crate::ui::views) next_new_moon: Date,
     pub(in crate::ui::views) next_full_moon: Date,
+    pub(in crate::ui::views) moonrise: Time,
+    pub(in crate::ui::views) moonset: Time,
 }
 
 impl UpdateableFromCmd for State {
@@ -31,11 +33,15 @@ impl UpdateableFromCmd for State {
                 lunar_illumination,
                 next_new_moon,
                 next_full_moon,
+                moonrise_at,
+                moonset_at,
             } => {
                 self.lunar_phase = lunar_phase;
                 self.lunar_illumination = lunar_illumination;
                 self.next_full_moon = next_full_moon;
                 self.next_new_moon = next_new_moon;
+                self.moonrise = moonrise_at;
+                self.moonset = moonset_at;
             }
 
             _ => (),
@@ -51,6 +57,8 @@ impl Default for State {
             lunar_illumination: Default::default(),
             next_new_moon: D2000,
             next_full_moon: D2000,
+            moonrise: MIDNIGHT,
+            moonset: MIDNIGHT,
         }
     }
 }
@@ -61,12 +69,16 @@ impl core::fmt::Display for State {
             f,
             r#"{}
 Lunar phase   {}({:>4.1} %)
+Moonrise       {}
+Moonset        {}
 New moon       {}
 Full moon      {}
 "#,
             self.datetime,
             self.lunar_phase,
             self.lunar_illumination,
+            self.moonrise,
+            self.moonset,
             self.next_new_moon,
             self.next_full_moon,
         )
