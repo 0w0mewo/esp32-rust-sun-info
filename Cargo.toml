@@ -34,6 +34,7 @@ esp-radio = { version = "0.18.0", features = [
 # embassy ecosystem
 # for more networking protocol support see https://crates.io/crates/edge-net
 embassy-executor = { version = "0.10.0", features = [] }
+embassy-futures = { version = "0.1.2", features = [] }
 embassy-time = "0.5.0"
 embassy-sync = "0.8"
 embassy-embedded-hal = "0.6.0"

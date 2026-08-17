@@ -16,7 +16,7 @@ use static_cell::StaticCell;
 const SSID: &str = env!("WIFI_SSID");
 const PSWD: &str = env!("WIFI_PSWD");
 
-use crate::events::{StatusLedCommand, NtpStatus};
+use crate::events::{NtpStatus, StatusLedCommand};
 use crate::ntp::fetch_timestamp_ntp;
 use crate::{AppError, rand_u64};
 

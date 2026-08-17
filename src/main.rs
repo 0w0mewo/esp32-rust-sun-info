@@ -11,10 +11,11 @@ use alloc::rc::Rc;
 use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
 use embassy_time::Instant;
+use embassy_time::Ticker;
 use esp_hal::gpio;
 use esp32_sun_info as lib;
 
-use embassy_time::{Duration, Timer};
+use embassy_time::Duration;
 use esp_backtrace as _;
 use esp_hal::system;
 use esp_println::println;
@@ -31,7 +32,7 @@ use lib::ui::ui_flush_task;
 use lib::ui::{self};
 extern crate alloc;
 
-const UPDATE_SEC: u64 = 3;
+const UPDATE_SEC: u64 = 2;
 const LAT: f64 = -33.8651;
 const LON: f64 = 151.2099;
 
@@ -69,14 +70,15 @@ async fn main(spawner: Spawner) -> ! {
     let (lat, lon) = (LAT, LON);
     let mut last_ntp_status = NtpStatus::default();
 
-    // unix timestamp for the last astronomical events update
-    // Note: set to 0 so that a update always performs at the startup
-    let mut last_astron_update = 0;
+    // ticker to reduce unnecessary computation because astronomical events
+    // do not change in a short time, (update every 10 minutes)
+    let mut astron_update_ticker = Ticker::every(Duration::from_secs(10 * 60));
+
+    // main loop ticker
+    let mut main_ticker = Ticker::every(Duration::from_secs(UPDATE_SEC));
 
     loop {
         let rtc_now = board.rtc.current_time_us();
-
-        // update info on display
         if let Ok(utc_now) = DateTime::from_unix_timestamp(
             rtc_now.div_euclid(MICROSECS_PER_SEC) as i64,
             rtc_now.rem_euclid(MICROSECS_PER_SEC) as i32,
@@ -85,21 +87,30 @@ async fn main(spawner: Spawner) -> ! {
             let now_local = now.to_local().unwrap();
             let now_sidereal_local = utc_now.to_sidereal_time_hms(lon);
 
-            // frequently update sun and moon position
-            sun.update_pos(&now, lat, lon);
-            moon.update_pos(&now, lat, lon);
-
-            // reduce unnecessary computation because astronomical events
-            // do not change in a short time, (update every 10 minutes)
-            if utc_now.unix_timestamp() - last_astron_update > 10 * 60 {
+            // make sure the moon and sun are updated at the first NTP synced
+            if let NtpStatus::OK = last_ntp_status {
                 sun.update_astron(&now, lat, lon);
                 moon.update_astron(&now, lat, lon);
-
-                last_astron_update = utc_now.unix_timestamp();
             }
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 last_ntp_status = new_ntp_status;
+            }
+
+            // wait for update tick
+            match embassy_futures::select::select(astron_update_ticker.next(), main_ticker.next())
+                .await
+            {
+                // infrequently update sun and moon atronomical events
+                embassy_futures::select::Either::First(_) => {
+                    sun.update_astron(&now, lat, lon);
+                    moon.update_astron(&now, lat, lon);
+                }
+                // frequently update sun and moon position
+                embassy_futures::select::Either::Second(_) => {
+                    sun.update_pos(&now, lat, lon);
+                    moon.update_pos(&now, lat, lon);
+                }
             }
 
             // update datetime status bar
@@ -120,8 +131,6 @@ async fn main(spawner: Spawner) -> ! {
             let sun_color = sun.color_at(&now_local.time);
             board.set_rgb_led_color(sun_color, day_percentage).await;
         }
-
-        Timer::after(Duration::from_secs(UPDATE_SEC)).await;
     }
 }
 

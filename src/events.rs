@@ -55,4 +55,3 @@ impl StatusLedCommand {
         LED_CMD.receive().await
     }
 }
-
