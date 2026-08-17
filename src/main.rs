@@ -87,13 +87,12 @@ async fn main(spawner: Spawner) -> ! {
             let now_local = now.to_local().unwrap();
             let now_sidereal_local = utc_now.to_sidereal_time_hms(lon);
 
-            // make sure the moon and sun are updated at the first NTP synced
-            if let NtpStatus::OK = last_ntp_status {
-                sun.update_astron(&now, lat, lon);
-                moon.update_astron(&now, lat, lon);
-            }
-
             if let Some(new_ntp_status) = NtpStatus::last() {
+                // make sure the moon and sun are updated at the first NTP synced
+                if let NtpStatus::OK = new_ntp_status {
+                    sun.update_astron(&now, lat, lon);
+                    moon.update_astron(&now, lat, lon);
+                }
                 last_ntp_status = new_ntp_status;
             }
 
