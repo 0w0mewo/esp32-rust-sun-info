@@ -1,6 +1,6 @@
 use core::f64::consts::TAU;
 use fasttime::{DateTime, OffsetDateTime, Time};
-use libm::{acos, asin, atan2, cos, floor, fmod, round, sin, tan};
+use libm::{acos, asin, atan2, cos, floor, fmod, round, sin, sincos, tan};
 
 use crate::{
     AstronDatetimeExt, DateExt, HorizontalCoordinate, MIDNIGHT, SECONDS_PER_DAY, altitude,
@@ -600,7 +600,8 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
 fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
     let h0_rad = (0.125_f64).to_radians();
     let lat_rad = lat.to_radians();
-    let lon_rad = lon.to_radians();
+    // Note: the longitude in the original formula is east negative while west negative is used here.
+    let lon_rad = (-lon).to_radians();
 
     // GMST at 0h
     let gmst0_rad = now_utc.date.to_sidereal_time(0.0).to_radians();
@@ -610,23 +611,22 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
     let mut jd = [0.0_f64; 3];
     let mut ra_rad = [0.0_f64; 3];
     let mut dec_rad = [0.0_f64; 3];
-    let dt = delta_t_2000(now_utc.decimal_year());
+    let dt = delta_t_2000(now_utc.date.decimal_year());
     for (idx, day_offset) in (-1..=1).enumerate() {
         jd[idx] = now_utc.date.to_julian_epoch_2000() + day_offset as f64;
         (ra_rad[idx], dec_rad[idx], _) = moon_coord(jd[idx]);
     }
 
     // Meeus, ch 15.1
-    let cos_h = (sin(h0_rad) - sin(lat_rad) * sin(dec_rad[1])) / (cos(lat_rad) * cos(dec_rad[1]));
+    let (dec_today_sin, dec_today_cos) = sincos(dec_rad[1]);
+    let cos_h = (sin(h0_rad) - sin(lat_rad) * dec_today_sin) / (cos(lat_rad) * dec_today_cos);
     if !(-1.0..=1.0).contains(&cos_h) {
         return None;
     }
     let h_rad = wrap_2pi(acos(cos_h));
 
     // Meeus, ch 15.2
-    // Note: the longitude in the original formula is east negative while west negative is used here.
-    // Therefore, `ra + L - GMST0` becomes `ra - L - GMST0`
-    let m_transit = wrap1((ra_rad[1] - lon_rad - gmst0_rad) / TAU);
+    let m_transit = wrap1((ra_rad[1] + lon_rad - gmst0_rad) / TAU);
     let m_rise = wrap1(m_transit - h_rad / TAU);
     let m_set = wrap1(m_transit + h_rad / TAU);
 
@@ -638,7 +638,7 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
         interp3(ra_rad[0], ra_rad[1], ra_rad[2], m_rise + dt),
         interp3(ra_rad[0], ra_rad[1], ra_rad[2], m_set + dt),
     );
-    
+
     // interpol DEC at rise and set
     let (dec_rad_rise, dec_rad_set) = (
         interp3(dec_rad[0], dec_rad[1], dec_rad[2], m_rise + dt),
@@ -652,16 +652,14 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
     );
     let (ha_rad_rise, ha_rad_set) = (wrap_pi(ha_rad_rise), wrap_pi(ha_rad_set));
 
-    // correction factor for m_rise and m_set 
-    let _dm_rise = (altitude(dec_rad_rise, lat_rad, ha_rad_rise) - h0_rad)
+    // correction factor for m_rise and m_set
+    let dm_rise = (altitude(dec_rad_rise, lat_rad, ha_rad_rise) - h0_rad)
         / (TAU * cos(dec_rad_rise) * cos(lat_rad) * sin(ha_rad_rise));
-    let _dm_set = (altitude(dec_rad_set, lat_rad, ha_rad_set) - h0_rad)
+    let dm_set = (altitude(dec_rad_set, lat_rad, ha_rad_set) - h0_rad)
         / (TAU * cos(dec_rad_set) * cos(lat_rad) * sin(ha_rad_set));
 
-    // esp_println::println!("{dm_rise} {dm_set}");
-
-    let rise = SECONDS_PER_DAY * wrap1(m_rise);
-    let set = SECONDS_PER_DAY * wrap1(m_set);
+    let rise = SECONDS_PER_DAY * wrap1(m_rise + dm_rise);
+    let set = SECONDS_PER_DAY * wrap1(m_set + dm_set);
 
     Some((rise, set))
 }
