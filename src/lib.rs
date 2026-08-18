@@ -66,14 +66,10 @@ pub trait AstronDatetimeExt: DateExt {
     }
 
     /// local sidereal time in degrees, assume the current datetime is in UT
+    #[inline]
     fn to_sidereal_time(&self, lon: f64) -> f64 {
         let jd = self.to_julian_epoch_2000();
-        let t = jd / DAYS_PER_JULIAN_CENTURY;
-        let gmst =
-            280.46061837 + 360.98564736629 * jd + 0.000387933 * t * t - (t * t * t) / 38710000.0;
-
-        let lst = (gmst + lon) % 360.0;
-        if lst < 0.0 { lst + 360.0 } else { lst }
+        sidereal_time(jd, lon)
     }
 
     /// local sidereal time in HMS, assume the current datetime is in UT
@@ -206,4 +202,13 @@ pub fn delta_t_2000(y: f64) -> f64 {
     let t = y - 2000.0;
 
     (62.92 + 0.32217 * t + 0.005589 * t * t) / SECONDS_PER_DAY
+}
+
+pub fn sidereal_time(jd2000: f64, lon: f64) -> f64 {
+    let t = jd2000 / DAYS_PER_JULIAN_CENTURY;
+    let gmst =
+        280.46061837 + 360.98564736629 * jd2000 + 0.000387933 * t * t - (t * t * t) / 38710000.0;
+
+    let lst = (gmst + lon) % 360.0;
+    if lst < 0.0 { lst + 360.0 } else { lst }
 }

@@ -69,16 +69,18 @@ impl core::fmt::Display for State {
             f,
             r#"{}
 Lunar phase   {}({:>4.1} %)
-Moonrise       {}
-Moonset        {}
+Moonrise         {:02}:{:02}
+Moonset          {:02}:{:02}
 New moon       {}
 Full moon      {}
 "#,
             self.datetime,
             self.lunar_phase,
             self.lunar_illumination,
-            self.moonrise,
-            self.moonset,
+            self.moonrise.hour,
+            self.moonrise.minute,
+            self.moonset.hour,
+            self.moonset.minute,
             self.next_new_moon,
             self.next_full_moon,
         )

@@ -1,10 +1,10 @@
 use core::f64::consts::TAU;
 use fasttime::{DateTime, OffsetDateTime, Time};
-use libm::{acos, asin, atan2, cos, floor, fmod, round, sin, sincos, tan};
+use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
-    AstronDatetimeExt, DateExt, HorizontalCoordinate, MIDNIGHT, SECONDS_PER_DAY, altitude,
-    delta_t_2000,
+    AstronDatetimeExt, DateExt, HorizontalCoordinate, J2000, SECONDS_PER_DAY, altitude,
+    delta_t_2000, sidereal_time,
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
@@ -65,10 +65,10 @@ pub struct Moon {
     new_moon: f64,
     /// local JD of upcoming full moon
     full_moon: f64,
-    /// moonrise in local time, seconds since midnight
-    moonrise: u32,
-    /// moonset in localtime, seconds since midnight
-    moonset: u32,
+    /// moonrise in local JD
+    moonrise: f64,
+    /// moonset in JD
+    moonset: f64,
     pos: HorizontalCoordinate,
 }
 
@@ -103,11 +103,13 @@ impl PlanetUpdater for Moon {
         }
 
         // moonrise and moonset
-        let (rise_utc_secs, set_utc_secs) = moon_rise_set(now_utc, lat, lon).unwrap_or_default();
-        let (rise_local_secs, set_local_secs) =
-            (rise_utc_secs + tz_offset_sec, set_utc_secs + tz_offset_sec);
-        self.moonrise = round(rise_local_secs % SECONDS_PER_DAY) as u32;
-        self.moonset = round(set_local_secs % SECONDS_PER_DAY) as u32;
+        let (rise_jd, set_jd) = moon_rise_set(now_utc, lat, lon);
+        if let Some(rise_jd) = rise_jd {
+            self.moonrise = rise_jd + tz_offset_days;
+        }
+        if let Some(set_jd) = set_jd {
+            self.moonset = set_jd + tz_offset_days;
+        }
 
         // other stuffs
         let (age, illumination) =
@@ -149,13 +151,13 @@ impl Moon {
     #[inline]
     /// moon rise in local time
     pub fn rise_at(&self) -> Time {
-        Time::from_seconds_nanos(self.moonrise, 0).unwrap_or(MIDNIGHT)
+        DateTime::from_julian(self.moonrise).time
     }
 
     #[inline]
     /// moon set in local time
     pub fn set_at(&self) -> Time {
-        Time::from_seconds_nanos(self.moonset, 0).unwrap_or(MIDNIGHT)
+        DateTime::from_julian(self.moonset).time
     }
 
     // lunar age and illumination
@@ -595,101 +597,53 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
     (dpsi, eps)
 }
 
-/// return None if there is no rise/set
-/// otherwise return rise and set time in UTC seconds since midnight
-fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
-    let h0_rad = (0.125_f64).to_radians();
+fn moon_altitude(jde: f64, lst_rad: f64, lat_rad: f64) -> f64 {
+    let (ra_rad, dec_rad, _) = moon_coord(jde);
+    let ha_rad = lst_rad - ra_rad;
+
+    altitude(dec_rad, lat_rad, ha_rad)
+}
+
+/// find moon rise and set JD by brute forcing the crossing point
+fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option<f64>) {
     let lat_rad = lat.to_radians();
-    // Note: the longitude in the original formula is east negative while west negative is used here.
-    let lon_rad = (-lon).to_radians();
+    let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
 
-    // GMST at 0h
-    let gmst0_rad = now_utc.date.to_sidereal_time(0.0).to_radians();
+    // initial states
+    let mut jd = now_utc.date.to_julian_epoch_2000();
+    let mut lst_rad = sidereal_time(jd, lon).to_radians();
+    let mut prev_alt = moon_altitude(jd + dt, lst_rad, lat_rad);
 
-    // apparent equatorial coordinates of moon at UTC 00:00 yesterday, today, tomorrow
-    // 0 = yesteray, 1 = today, 2 = tomorrow
-    let mut jd = [0.0_f64; 3];
-    let mut ra_rad = [0.0_f64; 3];
-    let mut dec_rad = [0.0_f64; 3];
-    let dt = delta_t_2000(now_utc.date.decimal_year());
-    for (idx, day_offset) in (-1..=1).enumerate() {
-        jd[idx] = now_utc.date.to_julian_epoch_2000() + day_offset as f64;
-        (ra_rad[idx], dec_rad[idx], _) = moon_coord(jd[idx]);
+    let jd_end = jd + 1.0;
+    let step = 60.0 / SECONDS_PER_DAY;
+
+    let mut found_rise = false;
+    let mut found_set = false;
+
+    let mut rise_jd = None;
+    let mut set_jd = None;
+
+    while jd < jd_end {
+        lst_rad = sidereal_time(jd, lon).to_radians();
+        let alt = moon_altitude(jd + dt, lst_rad, lat_rad);
+
+        if !found_rise && prev_alt < 0.0 && alt > 0.0 && alt > prev_alt {
+            rise_jd = Some(jd + J2000);
+            found_rise = true;
+        }
+
+        if !found_set && prev_alt > 0.0 && alt < 0.0 && alt < prev_alt {
+            set_jd = Some(jd + J2000);
+            found_set = true;
+        }
+
+        if found_rise && found_set {
+            break;
+        }
+
+        prev_alt = alt;
+        jd += step;
     }
 
-    // Meeus, ch 15.1
-    let (dec_today_sin, dec_today_cos) = sincos(dec_rad[1]);
-    let cos_h = (sin(h0_rad) - sin(lat_rad) * dec_today_sin) / (cos(lat_rad) * dec_today_cos);
-    if !(-1.0..=1.0).contains(&cos_h) {
-        return None;
-    }
-    let h_rad = wrap_2pi(acos(cos_h));
-
-    // Meeus, ch 15.2
-    let m_transit = wrap1((ra_rad[1] + lon_rad - gmst0_rad) / TAU);
-    let m_rise = wrap1(m_transit - h_rad / TAU);
-    let m_set = wrap1(m_transit + h_rad / TAU);
-
-    const C: f64 = 360.985647_f64.to_radians();
-    let (gst_rad_rise, gst_rad_set) = (gmst0_rad + C * m_rise, gmst0_rad + C * m_set);
-
-    // interpol RA at rise and set
-    let (ra_rad_rise, ra_rad_set) = (
-        interp3(ra_rad[0], ra_rad[1], ra_rad[2], m_rise + dt),
-        interp3(ra_rad[0], ra_rad[1], ra_rad[2], m_set + dt),
-    );
-
-    // interpol DEC at rise and set
-    let (dec_rad_rise, dec_rad_set) = (
-        interp3(dec_rad[0], dec_rad[1], dec_rad[2], m_rise + dt),
-        interp3(dec_rad[0], dec_rad[1], dec_rad[2], m_set + dt),
-    );
-
-    // hour angle of rise and set from interpolated DEC
-    let (ha_rad_rise, ha_rad_set) = (
-        gst_rad_rise - ra_rad_rise - lon_rad,
-        gst_rad_set - ra_rad_set - lon_rad,
-    );
-    let (ha_rad_rise, ha_rad_set) = (wrap_pi(ha_rad_rise), wrap_pi(ha_rad_set));
-
-    // correction factor for m_rise and m_set
-    let dm_rise = (altitude(dec_rad_rise, lat_rad, ha_rad_rise) - h0_rad)
-        / (TAU * cos(dec_rad_rise) * cos(lat_rad) * sin(ha_rad_rise));
-    let dm_set = (altitude(dec_rad_set, lat_rad, ha_rad_set) - h0_rad)
-        / (TAU * cos(dec_rad_set) * cos(lat_rad) * sin(ha_rad_set));
-
-    let rise = SECONDS_PER_DAY * wrap1(m_rise + dm_rise);
-    let set = SECONDS_PER_DAY * wrap1(m_set + dm_set);
-
-    Some((rise, set))
-}
-
-/// wrap a value to [0.0, 1.0]
-fn wrap1(m: f64) -> f64 {
-    let m = fmod(m, 1.0);
-    if m < 1.0 {
-        return m + 1.0;
-    }
-
-    m
-}
-
-/// wrap an angle to (-PI, PI]
-fn wrap_pi(a: f64) -> f64 {
-    a - TAU * round(a / TAU)
-}
-
-/// wrap an angle to [0.0, 2*PI]
-fn wrap_2pi(a: f64) -> f64 {
-    let a = wrap_pi(a);
-
-    if a < 0.0 { a + TAU } else { a }
-}
-
-fn interp3(start: f64, mid: f64, end: f64, n: f64) -> f64 {
-    let a = mid - start;
-    let b = end - mid;
-    let c = b - a;
-
-    mid + 0.5 * n * (a + b + c * n)
+    (rise_jd, set_jd)
 }
