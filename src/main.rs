@@ -71,8 +71,8 @@ async fn main(spawner: Spawner) -> ! {
     let mut last_ntp_status = NtpStatus::default();
 
     // ticker to reduce unnecessary computation because astronomical events
-    // do not change in a short time, (update every 10 minutes)
-    let mut astron_update_ticker = Ticker::every(Duration::from_secs(10 * 60));
+    // do not change in a short time, (update every 35 minutes)
+    let mut astron_update_ticker = Ticker::every(Duration::from_secs(35 * 60));
 
     // main loop ticker
     let mut main_ticker = Ticker::every(Duration::from_secs(UPDATE_SEC));
