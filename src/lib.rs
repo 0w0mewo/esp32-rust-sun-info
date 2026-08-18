@@ -165,7 +165,7 @@ impl HorizontalCoordinate {
         let az_deg = fmod(az_rad.to_degrees(), 360.0);
         let az_deg = if az_deg < 0.0 { az_deg + 360.0 } else { az_deg };
 
-        let altitude = asin(sin(lat) * sin(dec) + cos(lat) * cos(dec) * cos(ha)).to_degrees();
+        let altitude = altitude(dec, lat, ha).to_degrees();
 
         Self {
             altitude,
@@ -185,6 +185,10 @@ impl core::fmt::Display for HorizontalCoordinate {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "az: {:.4}, alt: {:.4}", self.azimuth, self.altitude)
     }
+}
+
+pub fn altitude(dec_rad: f64, lat_rad: f64, ha_rad: f64) -> f64 {
+    asin(sin(lat_rad) * sin(dec_rad) + cos(lat_rad) * cos(dec_rad) * cos(ha_rad))
 }
 
 /// ported from SunCalc: https://github.com/mourner/suncalc

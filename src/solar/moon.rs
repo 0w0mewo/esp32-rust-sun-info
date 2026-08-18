@@ -3,7 +3,8 @@ use fasttime::{DateTime, OffsetDateTime, Time};
 use libm::{acos, asin, atan2, cos, floor, fmod, round, sin, tan};
 
 use crate::{
-    AstronDatetimeExt, DateExt, HorizontalCoordinate, MIDNIGHT, SECONDS_PER_DAY, delta_t_2000,
+    AstronDatetimeExt, DateExt, HorizontalCoordinate, MIDNIGHT, SECONDS_PER_DAY, altitude,
+    delta_t_2000,
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
@@ -599,26 +600,65 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
 fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
     let h0_rad = (0.125_f64).to_radians();
     let lat_rad = lat.to_radians();
-    let lst0_rad = now_utc.date.to_sidereal_time(lon).to_radians(); // local sidereal time at 0h
+    let lon_rad = lon.to_radians();
 
-    // current apparent equatorial coordinates of moon
-    let jde = now_utc.to_julian_epoch_2000() + delta_t_2000(now_utc.decimal_year());
-    let (ra_rad, dec_rad, _) = moon_coord(jde);
+    // GMST at 0h
+    let gmst0_rad = now_utc.date.to_sidereal_time(0.0).to_radians();
+
+    // apparent equatorial coordinates of moon at UTC 00:00 yesterday, today, tomorrow
+    // 0 = yesteray, 1 = today, 2 = tomorrow
+    let mut jd = [0.0_f64; 3];
+    let mut ra_rad = [0.0_f64; 3];
+    let mut dec_rad = [0.0_f64; 3];
+    let dt = delta_t_2000(now_utc.decimal_year());
+    for (idx, day_offset) in (-1..=1).enumerate() {
+        jd[idx] = now_utc.date.to_julian_epoch_2000() + day_offset as f64;
+        (ra_rad[idx], dec_rad[idx], _) = moon_coord(jd[idx]);
+    }
 
     // Meeus, ch 15.1
-    let cos_h = (sin(h0_rad) - sin(lat_rad) * sin(dec_rad)) / (cos(lat_rad) * cos(dec_rad));
+    let cos_h = (sin(h0_rad) - sin(lat_rad) * sin(dec_rad[1])) / (cos(lat_rad) * cos(dec_rad[1]));
     if !(-1.0..=1.0).contains(&cos_h) {
         return None;
     }
-    let h_rad = acos(cos_h);
+    let h_rad = wrap_2pi(acos(cos_h));
 
     // Meeus, ch 15.2
     // Note: the longitude in the original formula is east negative while west negative is used here.
-    // Therefore, `ra + L - GMST0` becomes `ra - L - GMST0` which is resulting `ra - (L + GMST0)`, that is,
-    // `ra - LST0`
-    let transit = (ra_rad - lst0_rad) / TAU;
-    let m_rise = transit - h_rad / TAU;
-    let m_set = transit + h_rad / TAU;
+    // Therefore, `ra + L - GMST0` becomes `ra - L - GMST0`
+    let m_transit = wrap1((ra_rad[1] - lon_rad - gmst0_rad) / TAU);
+    let m_rise = wrap1(m_transit - h_rad / TAU);
+    let m_set = wrap1(m_transit + h_rad / TAU);
+
+    const C: f64 = 360.985647_f64.to_radians();
+    let (gst_rad_rise, gst_rad_set) = (gmst0_rad + C * m_rise, gmst0_rad + C * m_set);
+
+    // interpol RA at rise and set
+    let (ra_rad_rise, ra_rad_set) = (
+        interp3(ra_rad[0], ra_rad[1], ra_rad[2], m_rise + dt),
+        interp3(ra_rad[0], ra_rad[1], ra_rad[2], m_set + dt),
+    );
+    
+    // interpol DEC at rise and set
+    let (dec_rad_rise, dec_rad_set) = (
+        interp3(dec_rad[0], dec_rad[1], dec_rad[2], m_rise + dt),
+        interp3(dec_rad[0], dec_rad[1], dec_rad[2], m_set + dt),
+    );
+
+    // hour angle of rise and set from interpolated DEC
+    let (ha_rad_rise, ha_rad_set) = (
+        gst_rad_rise - ra_rad_rise - lon_rad,
+        gst_rad_set - ra_rad_set - lon_rad,
+    );
+    let (ha_rad_rise, ha_rad_set) = (wrap_pi(ha_rad_rise), wrap_pi(ha_rad_set));
+
+    // correction factor for m_rise and m_set 
+    let _dm_rise = (altitude(dec_rad_rise, lat_rad, ha_rad_rise) - h0_rad)
+        / (TAU * cos(dec_rad_rise) * cos(lat_rad) * sin(ha_rad_rise));
+    let _dm_set = (altitude(dec_rad_set, lat_rad, ha_rad_set) - h0_rad)
+        / (TAU * cos(dec_rad_set) * cos(lat_rad) * sin(ha_rad_set));
+
+    // esp_println::println!("{dm_rise} {dm_set}");
 
     let rise = SECONDS_PER_DAY * wrap1(m_rise);
     let set = SECONDS_PER_DAY * wrap1(m_set);
@@ -626,13 +666,32 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> Option<(f64, f64)> {
     Some((rise, set))
 }
 
-fn wrap1(mut m: f64) -> f64 {
-    while m < 0.0 {
-        m += 1.0;
-    }
-    while m > 1.0 {
-        m -= 1.0;
+/// wrap a value to [0.0, 1.0]
+fn wrap1(m: f64) -> f64 {
+    let m = fmod(m, 1.0);
+    if m < 1.0 {
+        return m + 1.0;
     }
 
     m
+}
+
+/// wrap an angle to (-PI, PI]
+fn wrap_pi(a: f64) -> f64 {
+    a - TAU * round(a / TAU)
+}
+
+/// wrap an angle to [0.0, 2*PI]
+fn wrap_2pi(a: f64) -> f64 {
+    let a = wrap_pi(a);
+
+    if a < 0.0 { a + TAU } else { a }
+}
+
+fn interp3(start: f64, mid: f64, end: f64, n: f64) -> f64 {
+    let a = mid - start;
+    let b = end - mid;
+    let c = b - a;
+
+    mid + 0.5 * n * (a + b + c * n)
 }
