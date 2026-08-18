@@ -1,4 +1,4 @@
-use fasttime::{Date, Time};
+use fasttime::{Date, DateTime};
 
 use crate::{
     D2000, MIDNIGHT,
@@ -15,8 +15,8 @@ pub struct State {
     pub(in crate::ui::views) lunar_illumination: f64,
     pub(in crate::ui::views) next_new_moon: Date,
     pub(in crate::ui::views) next_full_moon: Date,
-    pub(in crate::ui::views) moonrise: Time,
-    pub(in crate::ui::views) moonset: Time,
+    pub(in crate::ui::views) moonrise: DateTime,
+    pub(in crate::ui::views) moonset: DateTime,
 }
 
 impl UpdateableFromCmd for State {
@@ -57,8 +57,8 @@ impl Default for State {
             lunar_illumination: Default::default(),
             next_new_moon: D2000,
             next_full_moon: D2000,
-            moonrise: MIDNIGHT,
-            moonset: MIDNIGHT,
+            moonrise: DateTime::new(D2000, MIDNIGHT),
+            moonset: DateTime::new(D2000, MIDNIGHT),
         }
     }
 }
@@ -69,18 +69,22 @@ impl core::fmt::Display for State {
             f,
             r#"{}
 Lunar phase   {}({:>4.1} %)
-Moonrise         {:02}:{:02}
-Moonset          {:02}:{:02}
+Moonrise      {:02}-{:02} {:02}:{:02}
+Moonset       {:02}-{:02} {:02}:{:02}
 New moon       {}
 Full moon      {}
 "#,
             self.datetime,
             self.lunar_phase,
             self.lunar_illumination,
-            self.moonrise.hour,
-            self.moonrise.minute,
-            self.moonset.hour,
-            self.moonset.minute,
+            self.moonrise.date.month,
+            self.moonrise.date.day,
+            self.moonrise.time.hour,
+            self.moonrise.time.minute,
+            self.moonrise.date.month,
+            self.moonrise.date.day,
+            self.moonset.time.hour,
+            self.moonset.time.minute,
             self.next_new_moon,
             self.next_full_moon,
         )

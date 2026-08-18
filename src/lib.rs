@@ -188,7 +188,7 @@ pub fn altitude(dec_rad: f64, lat_rad: f64, ha_rad: f64) -> f64 {
 }
 
 /// ported from SunCalc: https://github.com/mourner/suncalc
-fn astro_refraction(h: f64) -> f64 {
+pub fn astro_refraction(h: f64) -> f64 {
     let h = h.to_radians().max(0.0); // formula valid for positive altitudes only
 
     // Meeus 16.4: 1.02 / tan(h + 10.26 / (h + 5.10)), h in degrees, arcmin result — folded into degree

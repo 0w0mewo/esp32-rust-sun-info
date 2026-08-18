@@ -1,10 +1,10 @@
 use core::f64::consts::TAU;
-use fasttime::{DateTime, OffsetDateTime, Time};
+use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
     AstronDatetimeExt, DateExt, HorizontalCoordinate, J2000, SECONDS_PER_DAY, altitude,
-    delta_t_2000, sidereal_time,
+    astro_refraction, delta_t_2000, sidereal_time,
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
@@ -150,14 +150,14 @@ impl Moon {
 
     #[inline]
     /// moon rise in local time
-    pub fn rise_at(&self) -> Time {
-        DateTime::from_julian(self.moonrise).time
+    pub fn rise_at(&self) -> DateTime {
+        DateTime::from_julian(self.moonrise)
     }
 
     #[inline]
     /// moon set in local time
-    pub fn set_at(&self) -> Time {
-        DateTime::from_julian(self.moonset).time
+    pub fn set_at(&self) -> DateTime {
+        DateTime::from_julian(self.moonset)
     }
 
     // lunar age and illumination
@@ -598,10 +598,14 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
 }
 
 fn moon_altitude(jde: f64, lst_rad: f64, lat_rad: f64) -> f64 {
-    let (ra_rad, dec_rad, _) = moon_coord(jde);
+    let (ra_rad, dec_rad, dist) = moon_coord(jde);
     let ha_rad = lst_rad - ra_rad;
 
-    altitude(dec_rad, lat_rad, ha_rad)
+    let mut alt = altitude(dec_rad, lat_rad, ha_rad);
+    alt -= asin(6378.14 / dist * cos(alt));
+    alt = alt.to_degrees();
+
+    alt + astro_refraction(alt)
 }
 
 /// find moon rise and set JD by brute forcing the crossing point
@@ -610,11 +614,12 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option
     let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
 
     // initial states
-    let mut jd = now_utc.date.to_julian_epoch_2000();
+    let jd_today = now_utc.date.to_julian_epoch_2000();
+    let mut jd = jd_today - 1.0;
     let mut lst_rad = sidereal_time(jd, lon).to_radians();
     let mut prev_alt = moon_altitude(jd + dt, lst_rad, lat_rad);
 
-    let jd_end = jd + 1.0;
+    let jd_end = jd_today + 1.0;
     let step = 60.0 / SECONDS_PER_DAY;
 
     let mut found_rise = false;
@@ -623,18 +628,25 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option
     let mut rise_jd = None;
     let mut set_jd = None;
 
-    while jd < jd_end {
+    while jd <= jd_end {
         lst_rad = sidereal_time(jd, lon).to_radians();
         let alt = moon_altitude(jd + dt, lst_rad, lat_rad);
 
-        if !found_rise && prev_alt < 0.0 && alt > 0.0 && alt > prev_alt {
+        if !found_rise && prev_alt < 0.0 && alt > 0.0 {
             rise_jd = Some(jd + J2000);
             found_rise = true;
         }
 
-        if !found_set && prev_alt > 0.0 && alt < 0.0 && alt < prev_alt {
-            set_jd = Some(jd + J2000);
-            found_set = true;
+        if !found_set && prev_alt > 0.0 && alt < 0.0 {
+            let possible_set_jd = jd + J2000;
+
+            // the set time is only validate when it is after the rise time
+            if let Some(rise_jd) = rise_jd
+                && rise_jd < possible_set_jd
+            {
+                set_jd = Some(possible_set_jd);
+                found_set = true;
+            }
         }
 
         if found_rise && found_set {
