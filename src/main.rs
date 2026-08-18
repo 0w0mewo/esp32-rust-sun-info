@@ -117,7 +117,8 @@ async fn main(spawner: Spawner) -> ! {
                 .await;
 
             // update sun and moon states
-            ui::UpdateCmd::notify_new_solar_state(now_local, &sun, &moon).await;
+            ui::UpdateCmd::notify_new_solar_state(now_local, &sun).await;
+            ui::UpdateCmd::notifiy_new_lunar_state(&moon).await;
 
             // flush display
             ui::UpdateCmd::redraw().await;

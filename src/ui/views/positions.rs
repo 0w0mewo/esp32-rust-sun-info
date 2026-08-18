@@ -1,5 +1,6 @@
 use crate::{
     AstronDatetimeExt, HorizontalCoordinate,
+    solar::SolarObject,
     ui::{
         UpdateCmd,
         components::DEG_SYM,
@@ -27,28 +28,27 @@ impl UpdateableFromCmd for State {
                 last_ntp_status,
             } => self.datetime.update(datetime, lst, last_ntp_status),
 
-            UpdateCmd::SetPosition { sun_pos, moon_pos } => {
-                self.sun_pos = sun_pos;
-                self.moon_pos = moon_pos;
-            }
+            UpdateCmd::SetPosition { pos, obj } => match obj {
+                SolarObject::Moon => self.moon_pos = pos,
+                SolarObject::Sun => self.sun_pos = pos,
+            },
 
-            UpdateCmd::SetLunar {
-                moonrise_azim,
-                moonset_azim,
+            UpdateCmd::SetRiseSetDirection {
+                obj,
+                rise_azim,
+                set_azim,
                 ..
-            } => {
-                self.moonrise_azim = moonrise_azim;
-                self.moonset_azim = moonset_azim;
-            }
+            } => match obj {
+                SolarObject::Moon => {
+                    self.moonrise_azim = rise_azim;
+                    self.moonset_azim = set_azim;
+                }
 
-            UpdateCmd::SetSolar {
-                sunrise_azim,
-                sunset_azim,
-                ..
-            } => {
-                self.sunrise_azim = sunrise_azim;
-                self.sunset_azim = sunset_azim;
-            }
+                SolarObject::Sun => {
+                    self.sunrise_azim = rise_azim;
+                    self.sunset_azim = set_azim;
+                }
+            },
 
             _ => {}
         }

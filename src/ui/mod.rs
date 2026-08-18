@@ -8,6 +8,7 @@ use ssd1306::{Ssd1306Async, prelude::*};
 
 use crate::board::I2cBusDeviceAsync;
 use crate::events::NtpStatus;
+use crate::solar::SolarObject;
 use crate::solar::moon::{self, Moon};
 use crate::solar::sun::{self, Sun};
 use crate::ui::views::View;
@@ -132,7 +133,7 @@ pub fn polar(center: Point, angle: f64, radius: f64) -> Point {
     center + Point::new(libm::round(x) as i32, libm::round(y) as i32)
 }
 
-static UPDATE_CMD_CHAN: channel::Channel<CriticalSectionRawMutex, UpdateCmd, 3> =
+static UPDATE_CMD_CHAN: channel::Channel<CriticalSectionRawMutex, UpdateCmd, 5> =
     channel::Channel::new();
 
 #[derive(Clone)]
@@ -147,23 +148,28 @@ pub enum UpdateCmd {
         lunar_illumination: f64,
         next_new_moon: Date,
         next_full_moon: Date,
-        moonrise_at: DateTime,
-        moonset_at: DateTime,
-        moonrise_azim: f64,
-        moonset_azim: f64,
     },
     SetSolar {
         day_progress: sun::DayProgress,
-        sunrise_at: Time,
-        sunset_at: Time,
         sundawn_at: Time,
         sundusk_at: Time,
-        sunrise_azim: f64,
-        sunset_azim: f64,
+    },
+    SetSunRiseSet {
+        rise_at: Time,
+        set_at: Time,
+    },
+    SetMoonRiseSet {
+        rise_at: DateTime,
+        set_at: DateTime,
+    },
+    SetRiseSetDirection {
+        obj: SolarObject,
+        rise_azim: f64,
+        set_azim: f64,
     },
     SetPosition {
-        sun_pos: HorizontalCoordinate,
-        moon_pos: HorizontalCoordinate,
+        obj: SolarObject,
+        pos: HorizontalCoordinate,
     },
     SetIpStatus(Ipv4Cidr),
     SetApStatus(String),
@@ -184,39 +190,68 @@ impl UpdateCmd {
         UpdateCmd::SetApStatus(connected_ap.into()).notify().await
     }
 
-    /// push new datetime, sun and moon state to UI
-    pub async fn notify_new_solar_state(datetime: DateTime, sun: &Sun, moon: &Moon) {
+    pub async fn notifiy_new_lunar_state(moon: &Moon) {
         // update moon info view
         (UpdateCmd::SetLunar {
             lunar_phase: moon.phase(),
             lunar_illumination: moon.illumination(),
             next_new_moon: moon.upcoming_new_moon().date,
             next_full_moon: moon.upcoming_full_moon().date,
-            moonrise_at: moon.rise_at(),
-            moonset_at: moon.set_at(),
-            moonrise_azim: moon.rise_azimuth(),
-            moonset_azim: moon.set_azimuth(),
         })
         .notify()
         .await;
 
+        (UpdateCmd::SetMoonRiseSet {
+            rise_at: moon.rise_at(),
+            set_at: moon.set_at(),
+        })
+        .notify()
+        .await;
+        (UpdateCmd::SetRiseSetDirection {
+            obj: SolarObject::Moon,
+            rise_azim: moon.rise_azimuth(),
+            set_azim: moon.set_azimuth(),
+        })
+        .notify()
+        .await;
+
+        (UpdateCmd::SetPosition {
+            obj: SolarObject::Moon,
+            pos: moon.pos(),
+        })
+        .notify()
+        .await;
+    }
+
+    /// push new datetime, sun and moon state to UI
+    pub async fn notify_new_solar_state(datetime: DateTime, sun: &Sun) {
         // update sun info view
         (UpdateCmd::SetSolar {
             day_progress: sun.day_progress(&datetime.time),
-            sunrise_at: sun.rise_at(),
-            sunset_at: sun.set_at(),
             sundusk_at: sun.dusk_at(),
             sundawn_at: sun.dawn_at(),
-            sunrise_azim: sun.rise_azimuth(),
-            sunset_azim: sun.set_azimuth(),
         })
         .notify()
         .await;
 
-        // update sun and moon position view
+        (UpdateCmd::SetRiseSetDirection {
+            obj: SolarObject::Sun,
+            rise_azim: sun.rise_azimuth(),
+            set_azim: sun.set_azimuth(),
+        })
+        .notify()
+        .await;
+        (UpdateCmd::SetSunRiseSet {
+            rise_at: sun.rise_at(),
+            set_at: sun.set_at(),
+        })
+        .notify()
+        .await;
+
+        // update position view
         (UpdateCmd::SetPosition {
-            sun_pos: sun.pos(),
-            moon_pos: moon.pos(),
+            obj: SolarObject::Sun,
+            pos: sun.pos(),
         })
         .notify()
         .await;

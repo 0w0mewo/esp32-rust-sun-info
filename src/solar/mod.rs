@@ -9,6 +9,7 @@ use crate::{
 pub mod moon;
 pub mod sun;
 
+#[derive(Clone, Copy)]
 pub enum SolarObject {
     Sun,
     Moon,

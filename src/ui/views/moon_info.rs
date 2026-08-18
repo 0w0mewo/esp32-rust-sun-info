@@ -2,7 +2,7 @@ use fasttime::{Date, DateTime};
 
 use crate::{
     D2000, MIDNIGHT,
-    solar::moon,
+    solar::{SolarObject, moon},
     ui::{
         UpdateCmd,
         components::DEG_SYM,
@@ -31,24 +31,32 @@ impl UpdateableFromCmd for State {
                 last_ntp_status,
             } => self.datetime.update(datetime, lst, last_ntp_status),
 
+            UpdateCmd::SetMoonRiseSet { rise_at, set_at } => {
+                self.moonrise = rise_at;
+                self.moonset = set_at;
+            }
+
+            UpdateCmd::SetRiseSetDirection {
+                obj,
+                rise_azim,
+                set_azim,
+            } => {
+                if let SolarObject::Moon = obj {
+                    self.moonrise_azimuth = rise_azim;
+                    self.moonset_azimuth = set_azim;
+                }
+            }
+
             UpdateCmd::SetLunar {
                 lunar_phase,
                 lunar_illumination,
                 next_new_moon,
                 next_full_moon,
-                moonrise_at,
-                moonset_at,
-                moonrise_azim,
-                moonset_azim,
             } => {
                 self.lunar_phase = lunar_phase;
                 self.lunar_illumination = lunar_illumination;
                 self.next_full_moon = next_full_moon;
                 self.next_new_moon = next_new_moon;
-                self.moonrise = moonrise_at;
-                self.moonset = moonset_at;
-                self.moonrise_azimuth = moonrise_azim;
-                self.moonset_azimuth = moonset_azim;
             }
 
             _ => (),

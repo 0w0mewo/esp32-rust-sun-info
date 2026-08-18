@@ -1,3 +1,4 @@
+use crate::solar::SolarObject;
 use crate::ui::components::DEG_SYM;
 use crate::{
     MIDNIGHT,
@@ -28,22 +29,31 @@ impl UpdateableFromCmd for State {
                 lst,
                 last_ntp_status,
             } => self.datetime.update(datetime, lst, last_ntp_status),
+
+            UpdateCmd::SetSunRiseSet { rise_at, set_at } => {
+                self.sunrise_at = rise_at;
+                self.sunset_at = set_at;
+            }
+
+            UpdateCmd::SetRiseSetDirection {
+                obj,
+                rise_azim,
+                set_azim,
+            } => {
+                if let SolarObject::Sun = obj {
+                    self.sunrise_azim = rise_azim;
+                    self.sunset_azim = set_azim;
+                }
+            }
+
             UpdateCmd::SetSolar {
                 day_progress,
-                sunrise_at,
-                sunset_at,
                 sundawn_at,
                 sundusk_at,
-                sunrise_azim,
-                sunset_azim,
             } => {
                 self.day_progress = day_progress;
-                self.sunrise_at = sunrise_at;
-                self.sunset_at = sunset_at;
                 self.dawn_at = sundawn_at;
                 self.dusk_at = sundusk_at;
-                self.sunrise_azim = sunrise_azim;
-                self.sunset_azim = sunset_azim;
             }
             _ => {}
         }
