@@ -14,6 +14,8 @@ pub struct State {
     pub(in crate::ui::views) moon_pos: HorizontalCoordinate,
     pub(in crate::ui::views) sunrise_azim: f64,
     pub(in crate::ui::views) sunset_azim: f64,
+    pub(in crate::ui::views) moonrise_azim: f64,
+    pub(in crate::ui::views) moonset_azim: f64,
 }
 
 impl UpdateableFromCmd for State {
@@ -28,6 +30,15 @@ impl UpdateableFromCmd for State {
             UpdateCmd::SetPosition { sun_pos, moon_pos } => {
                 self.sun_pos = sun_pos;
                 self.moon_pos = moon_pos;
+            }
+
+            UpdateCmd::SetLunar {
+                moonrise_azim,
+                moonset_azim,
+                ..
+            } => {
+                self.moonrise_azim = moonrise_azim;
+                self.moonset_azim = moonset_azim;
             }
 
             UpdateCmd::SetSolar {

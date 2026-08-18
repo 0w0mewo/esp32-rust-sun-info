@@ -5,6 +5,7 @@ use crate::{
     solar::moon,
     ui::{
         UpdateCmd,
+        components::DEG_SYM,
         views::{DatetimeStatus, UpdateableFromCmd},
     },
 };
@@ -17,6 +18,8 @@ pub struct State {
     pub(in crate::ui::views) next_full_moon: Date,
     pub(in crate::ui::views) moonrise: DateTime,
     pub(in crate::ui::views) moonset: DateTime,
+    pub(in crate::ui::views) moonset_azimuth: f64,
+    pub(in crate::ui::views) moonrise_azimuth: f64,
 }
 
 impl UpdateableFromCmd for State {
@@ -35,6 +38,8 @@ impl UpdateableFromCmd for State {
                 next_full_moon,
                 moonrise_at,
                 moonset_at,
+                moonrise_azim,
+                moonset_azim,
             } => {
                 self.lunar_phase = lunar_phase;
                 self.lunar_illumination = lunar_illumination;
@@ -42,6 +47,8 @@ impl UpdateableFromCmd for State {
                 self.next_new_moon = next_new_moon;
                 self.moonrise = moonrise_at;
                 self.moonset = moonset_at;
+                self.moonrise_azimuth = moonrise_azim;
+                self.moonset_azimuth = moonset_azim;
             }
 
             _ => (),
@@ -59,6 +66,8 @@ impl Default for State {
             next_full_moon: D2000,
             moonrise: DateTime::new(D2000, MIDNIGHT),
             moonset: DateTime::new(D2000, MIDNIGHT),
+            moonrise_azimuth: 0.0,
+            moonset_azimuth: 0.0,
         }
     }
 }
@@ -69,18 +78,20 @@ impl core::fmt::Display for State {
             f,
             r#"{}
 Lunar phase   {}({:>4.1} %)
-Moonrise      {:02}-{:02} {:02}:{:02}
-Moonset       {:02}-{:02} {:02}:{:02}
+Rise  ({:>3.0}{DEG_SYM})  {:02}-{:02} {:02}:{:02}
+Set   ({:>3.0}{DEG_SYM})  {:02}-{:02} {:02}:{:02}
 New moon       {}
 Full moon      {}
 "#,
             self.datetime,
             self.lunar_phase,
             self.lunar_illumination,
+            self.moonrise_azimuth,
             self.moonrise.date.month,
             self.moonrise.date.day,
             self.moonrise.time.hour,
             self.moonrise.time.minute,
+            self.moonset_azimuth,
             self.moonset.date.month,
             self.moonset.date.day,
             self.moonset.time.hour,

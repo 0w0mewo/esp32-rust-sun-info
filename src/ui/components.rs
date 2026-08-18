@@ -23,6 +23,8 @@ pub(crate) struct PolarLine<'a> {
     angle: f64,
     radius: f64,
     label: Option<&'a str>,
+    label_at_mid: bool,
+    has_line: bool,
 }
 impl<'a> PolarLine<'a> {
     pub fn new(center: Point, angle: f64, radius: f64) -> Self {
@@ -31,6 +33,8 @@ impl<'a> PolarLine<'a> {
             angle,
             radius,
             label: None,
+            has_line: true,
+            label_at_mid: false,
         }
     }
 
@@ -38,6 +42,18 @@ impl<'a> PolarLine<'a> {
         let mut p = Self::new(center, angle, radius);
         p.label.replace(label);
         p
+    }
+
+    pub fn label_at_line_middle(mut self, enable: bool) -> Self {
+        self.label_at_mid = enable;
+        self
+    }
+
+    /// should draw line
+    pub fn draw_line(mut self, enable: bool) -> Self {
+        self.has_line = enable;
+
+        self
     }
 }
 
@@ -53,19 +69,28 @@ impl Drawable for PolarLine<'_> {
         let p = polar(self.center, self.angle, self.radius);
 
         // line
-        Line::new(self.center, p).draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+        let line = Line::new(self.center, p);
+        if self.has_line {
+            line.draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+        }
+
+        let lp = if self.label_at_mid {
+            line.midpoint()
+        } else {
+            p
+        };
 
         // label
         if let Some(label) = self.label {
             Text::with_baseline(
                 label,
-                p,
+                lp,
                 MonoTextStyle::new(&MONO_5X7, pixelcolor::BinaryColor::On),
                 Baseline::Middle,
             )
             .draw(target)?;
         } else {
-            Circle::with_center(p, 2).draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+            Circle::with_center(lp, 2).draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
         }
 
         Ok(())

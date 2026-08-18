@@ -69,6 +69,10 @@ pub struct Moon {
     moonrise: f64,
     /// moonset in JD
     moonset: f64,
+    /// azimuth when rising
+    rise_azim: f64,
+    /// azimuth when setting
+    set_azim: f64,
     pos: HorizontalCoordinate,
 }
 
@@ -103,12 +107,27 @@ impl PlanetUpdater for Moon {
         }
 
         // moonrise and moonset
+        // Note: use get_pos here instead of in moon_rise_set() to save some time on heavy compuation
         let (rise_jd, set_jd) = moon_rise_set(now_utc, lat, lon);
         if let Some(rise_jd) = rise_jd {
+            // rise time in local JD
             self.moonrise = rise_jd + tz_offset_days;
+
+            // azimuth
+            HorizontalCoordinate {
+                azimuth: self.rise_azim,
+                ..
+            } = get_pos(&DateTime::from_julian(rise_jd), lat, lon, SolarObject::Moon);
         }
         if let Some(set_jd) = set_jd {
+            // set time in local JD
             self.moonset = set_jd + tz_offset_days;
+
+            // azimuth
+            HorizontalCoordinate {
+                azimuth: self.set_azim,
+                ..
+            } = get_pos(&DateTime::from_julian(set_jd), lat, lon, SolarObject::Moon);
         }
 
         // other stuffs
@@ -158,6 +177,16 @@ impl Moon {
     /// moon set in local time
     pub fn set_at(&self) -> DateTime {
         DateTime::from_julian(self.moonset)
+    }
+
+    #[inline]
+    pub fn rise_azimuth(&self) -> f64 {
+        self.rise_azim
+    }
+
+    #[inline]
+    pub fn set_azimuth(&self) -> f64 {
+        self.set_azim
     }
 
     // lunar age and illumination

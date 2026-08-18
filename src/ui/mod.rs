@@ -149,6 +149,8 @@ pub enum UpdateCmd {
         next_full_moon: Date,
         moonrise_at: DateTime,
         moonset_at: DateTime,
+        moonrise_azim: f64,
+        moonset_azim: f64,
     },
     SetSolar {
         day_progress: sun::DayProgress,
@@ -192,6 +194,8 @@ impl UpdateCmd {
             next_full_moon: moon.upcoming_full_moon().date,
             moonrise_at: moon.rise_at(),
             moonset_at: moon.set_at(),
+            moonrise_azim: moon.rise_azimuth(),
+            moonset_azim: moon.set_azimuth(),
         })
         .notify()
         .await;

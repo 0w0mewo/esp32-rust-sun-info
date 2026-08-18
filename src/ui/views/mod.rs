@@ -123,6 +123,7 @@ impl Drawable for View {
                     };
 
                     PolarLine::with_label(compass.center, pos.azimuth, arm_len, symb)
+                        .draw_line(false)
                         .draw(target)
                         .unwrap_or_default();
                 });
@@ -132,6 +133,16 @@ impl Drawable for View {
                 .into_iter()
                 .for_each(|&az| {
                     PolarLine::new(compass.center, az, arm_len)
+                        .draw(target)
+                        .unwrap_or_default();
+                });
+
+            // moonrise and moonset azimuth
+            [&state.moonrise_azim, &state.moonset_azim]
+                .into_iter()
+                .for_each(|&az| {
+                    PolarLine::with_label(compass.center, az, arm_len, "m")
+                        .label_at_line_middle(true)
                         .draw(target)
                         .unwrap_or_default();
                 });
