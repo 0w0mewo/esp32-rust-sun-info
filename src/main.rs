@@ -20,7 +20,6 @@ use esp_backtrace as _;
 use esp_hal::system;
 use esp_println::println;
 use fasttime::{DateTime, OffsetDateTime, UtcOffset};
-use lib::AstronDatetimeExt;
 use lib::MICROSECS_PER_SEC;
 use lib::board::{Board, InputType};
 use lib::events::NtpStatus;
@@ -58,7 +57,7 @@ async fn main(spawner: Spawner) -> ! {
 
     // switch UI views by button
     spawner.spawn(switch_view(board.button.clone()).unwrap());
-    
+
     // reflush the screen while UI is ready
     ui::UpdateCmd::redraw().await;
 
@@ -92,7 +91,6 @@ async fn main(spawner: Spawner) -> ! {
         ) {
             let now = OffsetDateTime::from_utc(utc_now, tz_offset);
             let now_local = now.to_local().unwrap();
-            let now_sidereal_local = utc_now.to_sidereal_time_hms(lon);
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 // make sure the moon and sun are updated at the first NTP synced
@@ -120,8 +118,7 @@ async fn main(spawner: Spawner) -> ! {
             }
 
             // update datetime status bar
-            ui::UpdateCmd::notify_new_datetime(now_local, now_sidereal_local, last_ntp_status)
-                .await;
+            ui::UpdateCmd::notify_new_datetime(now, last_ntp_status).await;
 
             // update sun and moon states
             ui::UpdateCmd::notify_new_solar_state(now_local, &sun).await;

@@ -33,7 +33,7 @@ impl UpdateableFromCmd for State {
                 last_ntp_status,
                 ..
             } => {
-                self.datetime.update(datetime, (0, 0, 0), last_ntp_status);
+                self.datetime.update(datetime, last_ntp_status);
 
                 // when the everything is ready, it begins with setting up datetime.
                 self.booted = true;
@@ -55,11 +55,11 @@ impl core::fmt::Display for State {
         if !self.booted {
             write!(f, "Starting up...")
         } else {
-            let datetime = self.datetime.datetime;
+            let utc_now = &self.datetime.datetime.utc;
             let uptime = Instant::now();
             write!(
                 f,
-                r#"{}       {:02}:{:02}:{:02}
+                r#"UTC {}   {:02}:{:02}:{:02}
 Uptime {} s
 AP 
   {}
@@ -67,10 +67,10 @@ IPv4
   {}
 NTP   [{}]
 "#,
-                datetime.date,
-                datetime.time.hour,
-                datetime.time.minute,
-                datetime.time.second,
+                utc_now.date,
+                utc_now.time.hour,
+                utc_now.time.minute,
+                utc_now.time.second,
                 uptime.as_secs(),
                 self.connected_ap,
                 self.ip_addr,

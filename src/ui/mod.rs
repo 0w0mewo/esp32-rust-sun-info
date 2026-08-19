@@ -3,7 +3,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel;
 use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::{pixelcolor, prelude::*};
-use fasttime::{Date, DateTime, Time};
+use fasttime::{Date, DateTime, OffsetDateTime, Time};
 use ssd1306::{Ssd1306Async, prelude::*};
 
 use crate::board::I2cBusDeviceAsync;
@@ -139,8 +139,7 @@ static UPDATE_CMD_CHAN: channel::Channel<CriticalSectionRawMutex, UpdateCmd, 5> 
 #[derive(Clone)]
 pub enum UpdateCmd {
     SetDatetime {
-        datetime: DateTime,
-        lst: (u8, u8, u8),
+        datetime: OffsetDateTime,
         last_ntp_status: NtpStatus,
     },
     SetLunar {
@@ -258,14 +257,9 @@ impl UpdateCmd {
     }
 
     /// push new datetime, LST, last NTP status to UI
-    pub async fn notify_new_datetime(
-        datetime: DateTime,
-        lst: (u8, u8, u8),
-        last_ntp_status: NtpStatus,
-    ) {
+    pub async fn notify_new_datetime(datetime: OffsetDateTime, last_ntp_status: NtpStatus) {
         (UpdateCmd::SetDatetime {
             datetime,
-            lst,
             last_ntp_status,
         })
         .notify()

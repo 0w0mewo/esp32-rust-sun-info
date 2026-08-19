@@ -1,5 +1,5 @@
 use crate::{
-    AstronDatetimeExt,
+    D2000, MIDNIGHT,
     events::NtpStatus,
     ui::{
         UpdateCmd, UpdateableFromCmd,
@@ -8,7 +8,7 @@ use crate::{
 };
 use alloc::format;
 use embedded_graphics::{pixelcolor, prelude::*};
-use fasttime::DateTime;
+use fasttime::{DateTime, OffsetDateTime, UtcOffset};
 
 mod moon_info;
 mod positions;
@@ -19,15 +19,13 @@ extern crate alloc;
 
 #[derive(Clone)]
 pub(crate) struct DatetimeStatus {
-    datetime: DateTime,
+    datetime: OffsetDateTime,
     last_ntp_status: NtpStatus,
-    lst: (u8, u8, u8),
 }
 
 impl DatetimeStatus {
-    pub fn update(&mut self, datetime: DateTime, lst: (u8, u8, u8), last_ntp_status: NtpStatus) {
+    pub fn update(&mut self, datetime: OffsetDateTime, last_ntp_status: NtpStatus) {
         self.last_ntp_status = last_ntp_status;
-        self.lst = lst;
         self.datetime = datetime;
     }
 }
@@ -35,39 +33,44 @@ impl DatetimeStatus {
 impl Default for DatetimeStatus {
     fn default() -> Self {
         Self {
-            lst: (0, 0, 0),
             last_ntp_status: Default::default(),
-            datetime: DateTime::from_unix_timestamp(0, 0).unwrap(),
+            datetime: OffsetDateTime::from_utc(
+                DateTime::new(D2000, MIDNIGHT),
+                UtcOffset::from_seconds(0).unwrap(),
+            ),
         }
     }
 }
 
 impl core::fmt::Display for DatetimeStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let t = if let NtpStatus::OK = self.last_ntp_status {
+        let local_now = self.datetime.to_local().unwrap();
+        let utc_now = &self.datetime.utc;
+
+        let local_time_line = if let NtpStatus::OK = self.last_ntp_status {
             format!(
-                "{:02}:{:02}:{:02}",
-                self.datetime.time.hour, self.datetime.time.minute, self.datetime.time.second
+                "{} {:02}:{:02}:{:02}",
+                local_now.date, local_now.time.hour, local_now.time.minute, local_now.time.second
             )
         } else {
             format!("NTP {}", self.last_ntp_status)
         };
 
-        let lst = if let NtpStatus::OK = self.last_ntp_status {
-            format!("{:02}:{:02}:{:02}", self.lst.0, self.lst.1, self.lst.2)
+        let utc_time_line = if let NtpStatus::OK = self.last_ntp_status {
+            format!(
+                "{} {:02}:{:02}:{:02}",
+                utc_now.date, utc_now.time.hour, utc_now.time.minute, utc_now.time.second
+            )
         } else {
             format!("NTP {}", self.last_ntp_status)
         };
 
         write!(
             f,
-            r#"JD {:.2}  {}
-Civil            {}
-Sidereal         {}"#,
-            self.datetime.to_julian(),
-            self.datetime.date,
-            t,
-            lst
+            r#"UTC   {}
+LT    {}
+---"#,
+            utc_time_line, local_time_line,
         )
     }
 }

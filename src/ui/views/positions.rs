@@ -24,9 +24,8 @@ impl UpdateableFromCmd for State {
         match *cmd {
             UpdateCmd::SetDatetime {
                 datetime,
-                lst,
                 last_ntp_status,
-            } => self.datetime.update(datetime, lst, last_ntp_status),
+            } => self.datetime.update(datetime, last_ntp_status),
 
             UpdateCmd::SetPosition { pos, obj } => match obj {
                 SolarObject::Moon => self.moon_pos = pos,
@@ -57,11 +56,13 @@ impl UpdateableFromCmd for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let utc_time = &self.datetime.datetime.utc;
+        let local_time = self.datetime.datetime.to_local().unwrap();
         write!(
             f,
             r#"JD {:.2}
+UTC  {:02}:{:02}:{:02}
 LT   {:02}:{:02}:{:02}
-LST  {:02}:{:02}:{:02}
 Sun pos.
  Az  {:>6.2}{DEG_SYM} 
  Alt {:>6.2}{DEG_SYM}
@@ -69,13 +70,13 @@ Moon pos.
  Az  {:>6.2}{DEG_SYM} 
  Alt {:>6.2}{DEG_SYM}
   "#,
-            self.datetime.datetime.to_julian(),
-            self.datetime.datetime.time.hour,
-            self.datetime.datetime.time.minute,
-            self.datetime.datetime.time.second,
-            self.datetime.lst.0,
-            self.datetime.lst.1,
-            self.datetime.lst.2,
+            utc_time.to_julian(),
+            utc_time.time.hour,
+            utc_time.time.minute,
+            utc_time.time.second,
+            local_time.time.hour,
+            local_time.time.minute,
+            local_time.time.second,
             self.sun_pos.azimuth,
             self.sun_pos.altitude,
             self.moon_pos.azimuth,

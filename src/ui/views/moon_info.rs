@@ -27,9 +27,8 @@ impl UpdateableFromCmd for State {
         match *cmd {
             UpdateCmd::SetDatetime {
                 datetime,
-                lst,
                 last_ntp_status,
-            } => self.datetime.update(datetime, lst, last_ntp_status),
+            } => self.datetime.update(datetime, last_ntp_status),
 
             UpdateCmd::SetMoonRiseSet { rise_at, set_at } => {
                 self.moonrise = rise_at;
