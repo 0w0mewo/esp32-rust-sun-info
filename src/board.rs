@@ -142,8 +142,8 @@ impl Board {
         }
     }
 
-    pub async fn init(&mut self) -> Result<(), AppError> {
-        // wait for network ready
+    /// wait for network ready
+    pub async fn wait_for_network(&mut self) -> Result<(), AppError> {
         // turn on status LED
         StatusLedCommand::On.notify().await;
         wait_networking_ready(&self.net_stack).await?;

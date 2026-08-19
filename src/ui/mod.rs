@@ -42,10 +42,10 @@ where
         .into_buffered_graphics_mode();
 
         let views = [
+            View::Status(Default::default()),
             View::Position(Default::default()),
             View::Moon(Default::default()),
             View::Sun(Default::default()),
-            View::Status(Default::default()),
         ];
         let view_circulator = Circulator::new(views.len());
 

@@ -46,10 +46,6 @@ esp_bootloader_esp_idf::esp_app_desc!();
 async fn main(spawner: Spawner) -> ! {
     // initialise board perhiphal resources
     let mut board = Board::new(&spawner).await;
-    board.init().await.unwrap_or_else(|e| {
-        println!("Startup failed: {}, reseting..", e);
-        system::software_reset();
-    });
 
     // create an compatible embedded_hal_async::i2c::I2c instance because the ssd1306 driver needs it
     let i2c_dev_ssd1306 = shared_bus::asynch::i2c::I2cDevice::new(board.i2c0_bus);
@@ -62,6 +58,14 @@ async fn main(spawner: Spawner) -> ! {
 
     // switch UI views by button
     spawner.spawn(switch_view(board.button.clone()).unwrap());
+    
+    // reflush the screen while UI is ready
+    ui::UpdateCmd::redraw().await;
+
+    board.wait_for_network().await.unwrap_or_else(|e| {
+        println!("Startup failed: {}, reseting..", e);
+        system::software_reset();
+    });
 
     // sunrise calc
     let tz_offset = UtcOffset::from_hours_minutes(true, 10, 0).unwrap();
@@ -76,6 +80,9 @@ async fn main(spawner: Spawner) -> ! {
 
     // main loop ticker
     let mut main_ticker = Ticker::every(Duration::from_secs(UPDATE_SEC));
+
+    // the default UI view is the status page, switch to other view here after everything is ready
+    ui::UpdateCmd::next_view().await;
 
     loop {
         let rtc_now = board.rtc.current_time_us();
