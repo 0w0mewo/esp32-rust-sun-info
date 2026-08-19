@@ -57,7 +57,7 @@ pub async fn fetch_timestamp_ntp(
     let ntp_server_addrs = net_stack
         .dns_query(NTP_SERVER, dns::DnsQueryType::A)
         .await
-        .unwrap();
+        .map_err(|_| Error::Dns)?;
     if ntp_server_addrs.is_empty() {
         return Err(Error::Dns);
     }
