@@ -644,11 +644,11 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option
 
     // initial states
     let jd_today = now_utc.date.to_julian_epoch_2000();
-    let mut jd = jd_today - 1.0;
+    let mut jd = jd_today - 0.5;
     let mut lst_rad = sidereal_time(jd, lon).to_radians();
     let mut prev_alt = moon_altitude(jd + dt, lst_rad, lat_rad);
 
-    let jd_end = jd_today + 1.0;
+    let jd_end = jd_today + 2.0;
     let step = 60.0 / SECONDS_PER_DAY;
 
     let mut found_rise = false;
