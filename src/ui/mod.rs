@@ -161,8 +161,8 @@ pub enum UpdateCmd {
         set_at: Time,
     },
     SetMoonRiseSet {
-        rise_at: DateTime,
-        set_at: DateTime,
+        rise_at: Option<DateTime>,
+        set_at: Option<DateTime>,
     },
     SetRiseSetDirection {
         obj: SolarObject,

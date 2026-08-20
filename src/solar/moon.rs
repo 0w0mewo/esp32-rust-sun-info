@@ -66,9 +66,9 @@ pub struct Moon {
     /// local JD of upcoming full moon
     full_moon: f64,
     /// moonrise in local JD
-    moonrise: f64,
+    moonrise: Option<f64>,
     /// moonset in JD
-    moonset: f64,
+    moonset: Option<f64>,
     /// azimuth when rising
     rise_azim: f64,
     /// azimuth when setting
@@ -109,26 +109,32 @@ impl PlanetUpdater for Moon {
         // moonrise and moonset
         // Note: use get_pos here instead of in moon_rise_set() to save some time on heavy compuation
         let (rise_jd, set_jd) = moon_rise_set(now_utc, lat, lon);
-        if let Some(rise_jd) = rise_jd {
-            // rise time in local JD
-            self.moonrise = rise_jd + tz_offset_days;
-
-            // azimuth
+        self.moonrise = rise_jd.map(|rise_jd_utc| {
             HorizontalCoordinate {
                 azimuth: self.rise_azim,
                 ..
-            } = get_pos(&DateTime::from_julian(rise_jd), lat, lon, SolarObject::Moon);
-        }
-        if let Some(set_jd) = set_jd {
-            // set time in local JD
-            self.moonset = set_jd + tz_offset_days;
+            } = get_pos(
+                &DateTime::from_julian(rise_jd_utc),
+                lat,
+                lon,
+                SolarObject::Moon,
+            );
 
-            // azimuth
+            rise_jd_utc + tz_offset_days
+        });
+        self.moonset = set_jd.map(|set_jd_utc| {
             HorizontalCoordinate {
                 azimuth: self.set_azim,
                 ..
-            } = get_pos(&DateTime::from_julian(set_jd), lat, lon, SolarObject::Moon);
-        }
+            } = get_pos(
+                &DateTime::from_julian(set_jd_utc),
+                lat,
+                lon,
+                SolarObject::Moon,
+            );
+
+            set_jd_utc + tz_offset_days
+        });
 
         // other stuffs
         let (age, illumination) =
@@ -168,15 +174,15 @@ impl Moon {
     }
 
     #[inline]
-    /// moon rise in local time
-    pub fn rise_at(&self) -> DateTime {
-        DateTime::from_julian(self.moonrise)
+    /// moon rise in local time, None if no rise event
+    pub fn rise_at(&self) -> Option<DateTime> {
+        self.moonrise.map(DateTime::from_julian)
     }
 
     #[inline]
-    /// moon set in local time
-    pub fn set_at(&self) -> DateTime {
-        DateTime::from_julian(self.moonset)
+    /// moon set in local time, None if no set event
+    pub fn set_at(&self) -> Option<DateTime> {
+        self.moonset.map(DateTime::from_julian)
     }
 
     #[inline]
@@ -637,14 +643,14 @@ fn moon_altitude(jde: f64, lst_rad: f64, lat_rad: f64) -> f64 {
     alt + astro_refraction(alt)
 }
 
-/// find moon rise and set JD by brute forcing the crossing point
+/// find upcoming moon rise and set JD by brute forcing the crossing point
 fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option<f64>) {
     let lat_rad = lat.to_radians();
     let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
 
     // initial states
-    let jd_today = now_utc.date.to_julian_epoch_2000();
-    let jd_end = jd_today + 2.0;
+    let jd_today = now_utc.to_julian_epoch_2000();
+    let jd_end = jd_today + 1.0;
     let step = 60.0 / SECONDS_PER_DAY;
 
     let mut found_rise = false;
@@ -653,28 +659,21 @@ fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option
     let mut rise_jd = None;
     let mut set_jd = None;
 
-    let mut jd = jd_today;
+    let mut jd = jd_today - 1.0;
     let mut lst_rad = sidereal_time(jd, lon).to_radians();
     let mut prev_alt = moon_altitude(jd + dt, lst_rad, lat_rad);
     while jd <= jd_end {
         lst_rad = sidereal_time(jd, lon).to_radians();
         let alt = moon_altitude(jd + dt, lst_rad, lat_rad);
 
-        if !found_rise && prev_alt < 0.0 && alt > 0.0 {
+        if !found_rise && prev_alt < 0.0 && alt > 0.0 && jd > jd_today {
             rise_jd = Some(jd + J2000);
             found_rise = true;
         }
 
-        if !found_set && prev_alt > 0.0 && alt < 0.0 {
-            let possible_set_jd = jd + J2000;
-
-            // the set time is only validate when it is after the rise time
-            if let Some(rise_jd) = rise_jd
-                && rise_jd < possible_set_jd
-            {
-                set_jd = Some(possible_set_jd);
-                found_set = true;
-            }
+        if !found_set && prev_alt > 0.0 && alt < 0.0 && jd > jd_today {
+            set_jd = Some(jd + J2000);
+            found_set = true;
         }
 
         if found_rise && found_set {
