@@ -5,6 +5,7 @@ use embassy_time::Instant;
 
 use crate::ui::{UpdateCmd, UpdateableFromCmd, views::DatetimeStatus};
 extern crate alloc;
+use alloc::format;
 use alloc::string::String;
 
 pub struct State {
@@ -56,11 +57,11 @@ impl core::fmt::Display for State {
             write!(f, "Starting up...")
         } else {
             let utc_now = &self.datetime.datetime.utc;
-            let uptime = Instant::now();
+            let uptime = Instant::now().as_secs();
             write!(
                 f,
                 r#"UTC {}   {:02}:{:02}:{:02}
-Uptime {} s
+Uptime {}
 AP 
   {}
 IPv4 
@@ -71,11 +72,21 @@ NTP   [{}]
                 utc_now.time.hour,
                 utc_now.time.minute,
                 utc_now.time.second,
-                uptime.as_secs(),
+                readable_uptime(uptime),
                 self.connected_ap,
                 self.ip_addr,
                 self.datetime.last_ntp_status,
             )
         }
     }
+}
+
+fn readable_uptime(secs: u64) -> String {
+    let secs_hrs_rem = secs % 86400;
+    let days = secs / 86400;
+    let hrs = secs_hrs_rem / 3600;
+    let minutes = (secs_hrs_rem % 3600) / 60;
+    let seconds = secs % 60;
+
+    format!("{:>4}d{:02}h{:02}m{:02}s", days, hrs, minutes, seconds)
 }

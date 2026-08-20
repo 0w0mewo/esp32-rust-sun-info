@@ -10,9 +10,11 @@ use crate::board::I2cBusDeviceAsync;
 use crate::events::NtpStatus;
 use crate::solar::SolarObject;
 use crate::solar::moon::{self, Moon};
-use crate::solar::sun::{self, Sun};
+use crate::solar::sun::{
+    self, NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, Sun,
+};
 use crate::ui::views::View;
-use crate::{AppError, HorizontalCoordinate, SSD1306};
+use crate::{AppError, HorizontalCoordinate, SECONDS_PER_DAY, SSD1306};
 
 extern crate alloc;
 use alloc::string::String;
@@ -25,7 +27,7 @@ pub(crate) const PRIMITIVE_STYLE_DEFAULT: PrimitiveStyle<pixelcolor::BinaryColor
 
 pub struct Ui<DI> {
     disp: SSD1306<DI>,
-    views: [View; 4],
+    views: [View; 5],
     view_looper: Circulator,
 }
 
@@ -46,6 +48,7 @@ where
             View::Position(Default::default()),
             View::Moon(Default::default()),
             View::Sun(Default::default()),
+            View::Seasons(Default::default()),
         ];
         let view_circulator = Circulator::new(views.len());
 
@@ -170,6 +173,12 @@ pub enum UpdateCmd {
         obj: SolarObject,
         pos: HorizontalCoordinate,
     },
+    SetEquinoxSolstice {
+        spring_jd: f64,
+        summer_jd: f64,
+        autumn_jd: f64,
+        winter_jd: f64,
+    },
     SetIpStatus(Ipv4Cidr),
     SetApStatus(String),
     Draw,
@@ -261,6 +270,28 @@ impl UpdateCmd {
         (UpdateCmd::SetDatetime {
             datetime,
             last_ntp_status,
+        })
+        .notify()
+        .await;
+    }
+
+    pub async fn update_season_start(datetime: &OffsetDateTime, lat: f64) {
+        let year = datetime.utc.date.year as f64;
+        let tz_days_offset = datetime.offset.as_seconds() as f64 / SECONDS_PER_DAY;
+
+        // seasons starting in local datetime
+        let local_seasons = if lat >= 0.0 {
+            NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT
+        } else {
+            SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT
+        };
+        let local_seasons = local_seasons.map(|s| s.equinox_solstice_jd(year) + tz_days_offset);
+
+        (UpdateCmd::SetEquinoxSolstice {
+            spring_jd: local_seasons[0],
+            summer_jd: local_seasons[1],
+            autumn_jd: local_seasons[2],
+            winter_jd: local_seasons[3],
         })
         .notify()
         .await;

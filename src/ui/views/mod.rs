@@ -12,6 +12,7 @@ use fasttime::{DateTime, OffsetDateTime, UtcOffset};
 
 mod moon_info;
 mod positions;
+mod seasons;
 mod status;
 mod sun_info;
 
@@ -80,6 +81,7 @@ pub enum View {
     Moon(moon_info::State),
     Position(positions::State),
     Status(status::State),
+    Seasons(seasons::State),
 }
 
 impl UpdateableFromCmd for View {
@@ -89,6 +91,7 @@ impl UpdateableFromCmd for View {
             Self::Position(state) => state.update(cmd),
             Self::Sun(state) => state.update(cmd),
             Self::Status(state) => state.update(cmd),
+            Self::Seasons(state) => state.update(cmd),
         }
     }
 }
@@ -156,6 +159,7 @@ impl Drawable for View {
             Self::Position(state) => format!("{}", state),
             Self::Sun(state) => format!("{}", state),
             Self::Status(state) => format!("{}", state),
+            Self::Seasons(state) => format!("{}", state),
         };
 
         CommonStatusTexts::new(Point::zero(), &status_txt).draw(target)?;

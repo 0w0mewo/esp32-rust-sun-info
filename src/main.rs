@@ -93,10 +93,13 @@ async fn main(spawner: Spawner) -> ! {
             let now_local = now.to_local().unwrap();
 
             if let Some(new_ntp_status) = NtpStatus::last() {
-                // make sure the moon and sun are updated at the first NTP synced
                 if let NtpStatus::OK = new_ntp_status {
+                    // make sure the moon and sun are updated at the first NTP synced
                     sun.update_astron(&now, lat, lon);
                     moon.update_astron(&now, lat, lon);
+
+                    // update seasons start time
+                    ui::UpdateCmd::update_season_start(&now, lat).await;
                 }
                 last_ntp_status = new_ntp_status;
             }

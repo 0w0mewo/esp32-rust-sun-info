@@ -1,10 +1,10 @@
 use core::f64::consts::TAU;
 use fasttime::{DateTime, OffsetDateTime, Time};
-use libm::{acos, asin, atan2, cos, round, sin, sincos, tan};
+use libm::{acos, asin, atan2, cos, floor, round, sin, sincos, tan};
 use smart_leds::{RGB, RGB8};
 
 use crate::{
-    DateExt, HorizontalCoordinate, SECONDS_PER_DAY,
+    DAYS_PER_JULIAN_CENTURY, DateExt, HorizontalCoordinate, J2000, SECONDS_PER_DAY, delta_t_2000,
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
@@ -259,4 +259,94 @@ pub(crate) fn sun_coord(d: f64) -> (f64, f64) {
     let dec = asin(sin(e) * sin(lon_apparent)); // 25.7
 
     (ra, dec)
+}
+
+/// 24 periodic terms, table 27.c,
+/// (A, B, C) in degrees
+const EQX_SOL_PERIODIC_TERMS: [(f64, f64, f64); 24] = [
+    (485.00, 324.96, 1934.14),
+    (203.00, 337.23, 32964.47),
+    (199.00, 342.08, 20.19),
+    (182.00, 27.85, 445267.11),
+    (156.00, 73.14, 45036.89),
+    (136.00, 171.52, 22518.44),
+    (77.00, 222.54, 65928.93),
+    (74.00, 296.72, 3034.91),
+    (70.00, 243.58, 9037.51),
+    (58.00, 119.81, 33718.15),
+    (52.00, 297.17, 150.68),
+    (50.00, 21.02, 2281.23),
+    (45.00, 247.54, 29929.56),
+    (44.00, 325.15, 31555.96),
+    (29.00, 60.93, 4443.42),
+    (18.00, 155.12, 67555.33),
+    (17.00, 288.79, 4562.45),
+    (16.00, 198.04, 62894.03),
+    (14.00, 199.76, 31436.92),
+    (12.00, 95.39, 14577.85),
+    (12.00, 287.11, 31931.76),
+    (12.00, 320.81, 34777.26),
+    (9.00, 227.73, 1222.11),
+    (8.00, 15.45, 16859.07),
+];
+
+/// astronomical season transiting pattern in north hemisphere
+pub const NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT: [AstronomicalSeason; 4] = [
+    AstronomicalSeason::Spring,
+    AstronomicalSeason::Summer,
+    AstronomicalSeason::Autumn,
+    AstronomicalSeason::Winter,
+];
+
+/// astronomical season transiting pattern in south hemisphere
+pub const SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT: [AstronomicalSeason; 4] = [
+    AstronomicalSeason::Autumn,
+    AstronomicalSeason::Winter,
+    AstronomicalSeason::Spring,
+    AstronomicalSeason::Summer,
+];
+
+#[derive(Clone, Copy)]
+pub enum AstronomicalSeason {
+    Spring,
+    Summer,
+    Autumn,
+    Winter,
+}
+
+impl AstronomicalSeason {
+    /// return JD of the given astronomical season of the year
+    pub fn equinox_solstice_jd(&self, year: f64) -> f64 {
+        let y = (floor(year) - 2000.0) / 1000.0;
+        let y2 = y * y;
+        let y3 = y2 * y;
+        let y4 = y3 * y;
+        // table 27.b, validate between 1000 to 3000 year
+        let jde0 = match self {
+            AstronomicalSeason::Spring => {
+                2451623.80984 + 365242.37404 * y + 0.05169 * y2 - 0.00411 * y3 - 0.00057 * y4
+            }
+            AstronomicalSeason::Summer => {
+                2451716.56767 + 365241.62603 * y + 0.00325 * y2 + 0.00888 * y3 - 0.00030 * y4
+            }
+            AstronomicalSeason::Autumn => {
+                2451810.21715 + 365242.01767 * y - 0.11575 * y2 + 0.00337 * y3 + 0.00078 * y4
+            }
+            AstronomicalSeason::Winter => {
+                2451900.05952 + 365242.74049 * y - 0.06223 * y2 - 0.00823 * y3 + 0.00032 * y4
+            }
+        };
+
+        let t = (jde0 - J2000) / DAYS_PER_JULIAN_CENTURY;
+        let w_rad = (35999.373 * t - 2.47).to_radians();
+        let delta_lambda = 1.0 + 0.0334 * cos(w_rad) + 0.0007 * cos(2.0 * w_rad);
+
+        let s = EQX_SOL_PERIODIC_TERMS.iter().fold(0.0, |s, term| {
+            s + term.0 * cos((term.1 + term.2 * t).to_radians())
+        });
+
+        let jde = jde0 + ((0.00001 * s) / delta_lambda);
+
+        jde - delta_t_2000(year)
+    }
 }
