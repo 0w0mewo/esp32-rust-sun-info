@@ -51,6 +51,14 @@ pub type RgbLedType<'a> = esp_hal_smartled::RmtSmartLeds<
     esp_hal_smartled::color_order::Grb,
 >;
 
+const RGB_LED_TIMING: esp_hal_smartled::Timing = cfg_select! {
+    feature = "ws2811" => esp_hal_smartled::WS2811_TIMING,
+    feature = "ws2812" => esp_hal_smartled::WS2812_TIMING,
+    feature = "ws2812b" => esp_hal_smartled::WS2812B_TIMING,
+    feature = "sk68" => esp_hal_smartled::SK68XX_TIMING,
+    _ => esp_hal_smartled::WS2811_TIMING
+};
+
 pub struct Board {
     /// shared i2c0 bus with mutex
     /// Note: use reference to I2cBus instead of Rc<I2cBus> here because the embassy_shared_bus
@@ -106,12 +114,15 @@ impl Board {
         let rmt = rmt::Rmt::new(perip.RMT, Rate::from_mhz(80))
             .unwrap()
             .into_async();
-        let rgb_led = esp_hal_smartled::RmtSmartLeds::new(
-            esp_hal_smartled::WS2812B_TIMING,
-            rmt.channel0,
-            perip.GPIO33,
-        )
-        .unwrap();
+        let mut rgb_led =
+            esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, perip.GPIO33)
+                .unwrap();
+        // turn it off
+        rgb_led
+            .write([RGB8::new(0, 0, 0)])
+            .into_future()
+            .await
+            .unwrap();
 
         // button
         let button = Mutex::new(gpio::Input::new(

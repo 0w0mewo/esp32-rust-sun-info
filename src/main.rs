@@ -72,6 +72,7 @@ async fn main(spawner: Spawner) -> ! {
     let mut moon = Moon::default();
     let (lat, lon) = (LAT, LON);
     let mut last_ntp_status = NtpStatus::default();
+    let mut first_run = true;
 
     // ticker to reduce unnecessary computation because astronomical events
     // do not change in a short time, (update every 35 minutes)
@@ -93,15 +94,20 @@ async fn main(spawner: Spawner) -> ! {
             let now_local = now.to_local().unwrap();
 
             if let Some(new_ntp_status) = NtpStatus::last() {
-                if let NtpStatus::OK = new_ntp_status {
-                    // make sure the moon and sun are updated at the first NTP synced
-                    sun.update_astron(&now, lat, lon);
-                    moon.update_astron(&now, lat, lon);
-
-                    // update seasons start time
-                    ui::UpdateCmd::update_season_start(&now, lat).await;
-                }
                 last_ntp_status = new_ntp_status;
+            }
+
+            if let NtpStatus::OK = last_ntp_status
+                && first_run
+            {
+                // make sure the moon and sun are updated at the first NTP synced
+                sun.update_astron(&now, lat, lon);
+                moon.update_astron(&now, lat, lon);
+
+                // update seasons start time
+                ui::UpdateCmd::update_season_start(&now, lat).await;
+
+                first_run = false;
             }
 
             // wait for update tick

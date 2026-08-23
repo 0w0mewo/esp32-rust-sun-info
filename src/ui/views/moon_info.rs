@@ -83,7 +83,8 @@ impl Default for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let rise = self.moonrise.map_or(">23:59".into(), |rise| {
+        let no_riseset_info = "[No rise/set today]";
+        let rise = self.moonrise.map_or(no_riseset_info.into(), |rise| {
             format!(
                 "({:>3.0}{DEG_SYM})  {:02}-{:02} {:02}:{:02}",
                 self.moonrise_azimuth,
@@ -93,7 +94,7 @@ impl core::fmt::Display for State {
                 rise.time.minute,
             )
         });
-        let set = self.moonset.map_or(">23:59".into(), |set| {
+        let set = self.moonset.map_or(no_riseset_info.into(), |set| {
             format!(
                 "({:>3.0}{DEG_SYM})  {:02}-{:02} {:02}:{:02}",
                 self.moonset_azimuth, set.date.month, set.date.day, set.time.hour, set.time.minute,
