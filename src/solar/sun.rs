@@ -146,8 +146,7 @@ impl Sun {
 
         if let DayProgress::Day(day_progress) = self.day_progress(t) {
             // blend
-            let t = ((2.0 * day_progress - 1.0) * (2.0 * day_progress - 1.0)).clamp(0.0, 1.0); // smoother curve and clamp it between 0.0 and 1.0
-            let sun_color = NOON_COLOR * (1.0 - t) + END_OF_DAY_COLOR * t;
+            let sun_color = NOON_COLOR * (1.0 - day_progress) + END_OF_DAY_COLOR * day_progress;
 
             RGB::new(sun_color.r as u8, sun_color.g as u8, sun_color.b as u8)
         } else {
