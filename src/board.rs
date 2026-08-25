@@ -1,8 +1,12 @@
+use core::cell::RefCell;
+
 use alloc::rc::Rc;
 use embassy_embedded_hal::shared_bus;
 use embassy_net::StackResources;
+use embassy_sync::blocking_mutex::Mutex as MutexBlocking;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::mutex::Mutex;
+use embassy_sync::mutex::Mutex as MutexAsync;
+
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::time::Rate;
@@ -24,23 +28,30 @@ use crate::{AppError, rand_u64};
 extern crate alloc;
 
 // shared GPIO input
-pub type InputType<'a> = Mutex<NoopRawMutex, gpio::Input<'a>>;
+pub type InputType<'a> = MutexAsync<NoopRawMutex, gpio::Input<'a>>;
 
 // shared GPIO output
-pub type OutputType<'a> = Mutex<NoopRawMutex, gpio::Output<'a>>;
+pub type OutputType<'a> = MutexAsync<NoopRawMutex, gpio::Output<'a>>;
 
-/// i2c bus type
-pub type I2cType<'a> = i2c::master::I2c<'a, esp_hal::Async>;
+/// i2c bus type, async
+pub type I2cTypeAsync<'a> = i2c::master::I2c<'a, esp_hal::Async>;
 
-/// shared i2c bus
-pub type I2cBus<'a> = Mutex<NoopRawMutex, I2cType<'a>>;
+/// i2c bus type, blocking
+pub type I2cTypeBlocking<'a> = i2c::master::I2c<'a, esp_hal::Blocking>;
+
+/// shared i2c bus, async
+pub type I2cBusAsync<'a> = MutexAsync<NoopRawMutex, I2cTypeAsync<'a>>;
+
+/// shared i2c bus, blocking
+pub type I2cBusBlocking<'a> = MutexBlocking<NoopRawMutex, RefCell<I2cTypeBlocking<'a>>>;
 
 /// use for abstracted i2c bus device that implemented with `embedded-hal-async`
-pub type I2cBusDeviceAsync<'a> = shared_bus::asynch::i2c::I2cDevice<'a, NoopRawMutex, I2cType<'a>>;
+pub type I2cBusDeviceAsync<'a> =
+    shared_bus::asynch::i2c::I2cDevice<'a, NoopRawMutex, I2cTypeAsync<'a>>;
 
 /// use for abstracted i2c bus device that implemented with `embedded-hal`
 pub type I2cBusDeviceBlocking<'a> =
-    shared_bus::blocking::i2c::I2cDevice<'a, NoopRawMutex, I2cType<'a>>;
+    shared_bus::blocking::i2c::I2cDevice<'a, NoopRawMutex, I2cTypeBlocking<'a>>;
 
 // single RGB led type
 pub type RgbLedType<'a> = esp_hal_smartled::RmtSmartLeds<
@@ -63,7 +74,7 @@ pub struct Board {
     /// shared i2c0 bus with mutex
     /// Note: use reference to I2cBus instead of Rc<I2cBus> here because the embassy_shared_bus
     /// library required `&'static Mutex` as argument
-    pub i2c0_bus: &'static I2cBus<'static>,
+    pub i2c0_bus: &'static I2cBusAsync<'static>,
     /// rtc share by multiple task, therefore, it should be Rc::clone to pass around instead of borrow
     pub rtc: Rc<rtc_cntl::Rtc<'static>>,
     /// network stack
@@ -97,7 +108,7 @@ impl Board {
 
         // share access i2c0 bus with static lifetime and async feature
         let i2c0_bus = {
-            static I2C_BUS: StaticCell<I2cBus<'static>> = StaticCell::new();
+            static I2C_BUS: StaticCell<I2cBusAsync<'static>> = StaticCell::new();
             let i2c_bus = i2c::master::I2c::new(
                 perip.I2C0,
                 i2c::master::Config::default().with_frequency(time::Rate::from_khz(400)),
@@ -107,7 +118,7 @@ impl Board {
             .with_sda(perip.GPIO23)
             .into_async();
 
-            I2C_BUS.init(Mutex::new(i2c_bus))
+            I2C_BUS.init(MutexAsync::new(i2c_bus))
         };
 
         // RGB led
@@ -125,7 +136,7 @@ impl Board {
             .unwrap();
 
         // button
-        let button = Mutex::new(gpio::Input::new(
+        let button = MutexAsync::new(gpio::Input::new(
             perip.GPIO19,
             gpio::InputConfig::default().with_pull(gpio::Pull::Up),
         ));

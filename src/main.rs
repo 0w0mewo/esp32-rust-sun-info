@@ -12,6 +12,7 @@ use embassy_embedded_hal::shared_bus;
 use embassy_executor::Spawner;
 use embassy_time::Instant;
 use embassy_time::Ticker;
+use embassy_time::Timer;
 use esp_hal::gpio;
 use esp32_sun_info as lib;
 
@@ -34,6 +35,8 @@ extern crate alloc;
 const UPDATE_SEC: u64 = 2;
 const LAT: f64 = -33.8651;
 const LON: f64 = 151.2099;
+const TZ_OFFSET_HOURS: u8 = 10;
+const TZ_OFFSET_MINUTES: u8 = 0;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -67,7 +70,9 @@ async fn main(spawner: Spawner) -> ! {
     });
 
     // sunrise calc
-    let tz_offset = UtcOffset::from_hours_minutes(true, 10, 0).unwrap();
+    let tz_offset =
+        UtcOffset::from_hours_minutes(TZ_OFFSET_HOURS > 0, TZ_OFFSET_HOURS, TZ_OFFSET_MINUTES)
+            .unwrap();
     let mut sun = Sun::default();
     let mut moon = Moon::default();
     let (lat, lon) = (LAT, LON);
@@ -77,9 +82,6 @@ async fn main(spawner: Spawner) -> ! {
     // ticker to reduce unnecessary computation because astronomical events
     // do not change in a short time, (update every 35 minutes)
     let mut astron_update_ticker = Ticker::every(Duration::from_secs(35 * 60));
-
-    // main loop ticker
-    let mut main_ticker = Ticker::every(Duration::from_secs(UPDATE_SEC));
 
     // the default UI view is the status page, switch to other view here after everything is ready
     ui::UpdateCmd::next_view().await;
@@ -111,8 +113,11 @@ async fn main(spawner: Spawner) -> ! {
             }
 
             // wait for update tick
-            match embassy_futures::select::select(astron_update_ticker.next(), main_ticker.next())
-                .await
+            match embassy_futures::select::select(
+                astron_update_ticker.next(),
+                Timer::after_secs(UPDATE_SEC),
+            )
+            .await
             {
                 // infrequently update sun and moon atronomical events
                 embassy_futures::select::Either::First(_) => {
@@ -151,8 +156,10 @@ async fn main(spawner: Spawner) -> ! {
 async fn switch_view(button: Rc<InputType<'static>>) {
     loop {
         // waiting for button pressed
-        let mut btn = button.lock().await;
-        wait_debounced_button(&mut btn).await;
+        {
+            let mut btn = button.lock().await;
+            wait_debounced_button(&mut btn).await;
+        }
 
         // switch view
         ui::UpdateCmd::next_view().await;
