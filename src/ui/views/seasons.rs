@@ -1,4 +1,5 @@
 use crate::AstronDatetimeExt;
+use crate::ui::views::TextBasedView;
 use crate::ui::{
     UpdateCmd,
     views::{DatetimeStatus, UpdateableFromCmd},
@@ -69,3 +70,5 @@ Winter   {} {:02}:{:02}
         )
     }
 }
+
+impl TextBasedView for State {}

@@ -1,10 +1,10 @@
+use embedded_graphics::{Drawable, pixelcolor, prelude::*};
+extern crate alloc;
+use alloc::format;
+
 use crate::{
-    AstronDatetimeExt, HorizontalCoordinate,
-    solar::SolarObject,
-    ui::{
-        UpdateCmd,
-        components::DEG_SYM,
-        views::{DatetimeStatus, UpdateableFromCmd},
+    AstronDatetimeExt, HorizontalCoordinate, solar::SolarObject, ui::{
+        UpdateCmd, components::{CommonStatusTexts, Compass, DEG_SYM, MOON_SYM, PolarLine, SUN_SYM}, views::{DatetimeStatus, UpdateableFromCmd},
     },
 };
 
@@ -82,5 +82,67 @@ Moon pos.
             self.moon_pos.azimuth,
             self.moon_pos.altitude
         )
+    }
+}
+
+impl Drawable for State {
+    type Color = pixelcolor::BinaryColor;
+
+    type Output = ();
+
+    fn draw<D>(&self, target: &mut D) -> Result<Self::Output, D::Error>
+    where
+        D: embedded_graphics::prelude::DrawTarget<Color = Self::Color>,
+    {
+        let center = target.bounding_box().center() + Point::new(32, 0);
+
+        let compass = Compass::new(center, 64);
+        compass.draw(target)?;
+
+        // sun and moon azimuths, draw while it's above horizon
+        let arm_len = 0.5 * compass.diameter as f64;
+        [&self.sun_pos, &self.moon_pos]
+            .into_iter()
+            .enumerate()
+            .filter(|(_, pos)| pos.altitude >= 0.0)
+            .for_each(|(id, pos)| {
+                // the closer to zenith, the shorter the arm length
+                let arm_len = arm_len * (1.0 - (pos.altitude.abs() / 90.0));
+
+                // select symbol
+                let symb = match id {
+                    0 => SUN_SYM,
+                    1 => MOON_SYM,
+                    _ => unreachable!(),
+                };
+
+                PolarLine::with_label(compass.center, pos.azimuth, arm_len, symb)
+                    .draw_line(false)
+                    .draw(target)
+                    .unwrap_or_default();
+            });
+
+        // sunrise and sunset azimuth
+        [&self.sunrise_azim, &self.sunset_azim]
+            .into_iter()
+            .for_each(|&az| {
+                PolarLine::new(compass.center, az, arm_len)
+                    .draw(target)
+                    .unwrap_or_default();
+            });
+
+        // moonrise and moonset azimuth
+        [&self.moonrise_azim, &self.moonset_azim]
+            .into_iter()
+            .for_each(|&az| {
+                PolarLine::with_label(compass.center, az, arm_len, "m")
+                    .label_at_line_middle(true)
+                    .draw(target)
+                    .unwrap_or_default();
+            });
+        
+        CommonStatusTexts::new(Point::zero(), &format!("{}", self)).draw(target)?;
+
+        Ok(())
     }
 }

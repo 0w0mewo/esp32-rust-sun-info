@@ -1,5 +1,6 @@
 use crate::solar::SolarObject;
 use crate::ui::components::DEG_SYM;
+use crate::ui::views::TextBasedView;
 use crate::{
     MIDNIGHT,
     solar::sun,
@@ -96,3 +97,5 @@ Dusk            {}
         )
     }
 }
+
+impl TextBasedView for State {}

@@ -61,7 +61,7 @@ sntpc-net-embassy = { version = "0.11", default-features = false }
 
 # misc lib
 libm = "0.2.16"
-fasttime = { version = "0.2", default-features = false }
+fasttime = { version = "0.3", default-features = false }
 thiserror = { version = "2.0.19", default-features = false }
 static_cell      = "2.1.1"
 critical-section = "1.2.0"
@@ -86,4 +86,4 @@ opt-level = "s"
 codegen-units = 1     # LLVM can perform better optimizations using a single thread
 debug         = 2     # prefer slower builds but better debugging experience
 lto           = 'fat'
-opt-level     = 's'
+opt-level     = 'z'

@@ -8,7 +8,7 @@ use crate::{
     ui::{
         UpdateCmd,
         components::DEG_SYM,
-        views::{DatetimeStatus, UpdateableFromCmd},
+        views::{DatetimeStatus, TextBasedView, UpdateableFromCmd},
     },
 };
 
@@ -120,3 +120,5 @@ Full moon      {}
         )
     }
 }
+
+impl TextBasedView for State {}

@@ -3,6 +3,7 @@ use core::str::FromStr;
 use embassy_net::Ipv4Cidr;
 use embassy_time::Instant;
 
+use crate::ui::views::TextBasedView;
 use crate::ui::{UpdateCmd, UpdateableFromCmd, views::DatetimeStatus};
 extern crate alloc;
 use alloc::format;
@@ -80,6 +81,8 @@ NTP   [{}]
         }
     }
 }
+
+impl TextBasedView for State {}
 
 fn readable_uptime(secs: u64) -> String {
     let secs_hrs_rem = secs % 86400;

@@ -100,7 +100,7 @@ pub trait DateExt {
 impl AstronDatetimeExt for DateTime {
     fn from_julian(jd: f64) -> Self {
         let unix_secs = ((jd - 2440587.5) * SECONDS_PER_DAY) as i64;
-        DateTime::from_unix_timestamp(unix_secs, 0).unwrap()
+        DateTime::from_unix_timestamp(unix_secs, 0).unwrap_or(DateTime::new(D2000, MIDNIGHT))
     }
 
     fn to_julian(&self) -> f64 {
