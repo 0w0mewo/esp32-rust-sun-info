@@ -27,10 +27,12 @@ impl core::fmt::Display for DayProgress {
 
 impl DayProgress {
     /// convert to PWM duty cycle, between 0 to 100% during `Self::Day`,
-    /// full 100% at `Self::Night`
+    /// full 100% at `Self::Night`,
+    /// 0% -> 100% before noon, 100% -> 0% after noon
     pub fn to_pwm_duty_cycle_percent(&self) -> u8 {
         if let Self::Day(day_prog) = self {
-            (day_prog * 100.0) as u8
+            // ramping up before noon, ramping down after noon
+            ((1.0 - 2.0 * (day_prog - 0.5).abs()).max(0.0) * 100.0) as u8
         } else {
             100
         }
@@ -140,13 +142,19 @@ impl Sun {
         )
     }
 
-    pub fn color_at(&self, t: &Time) -> RGB8 {
+    pub fn color_at(&self, now: &Time) -> RGB8 {
         const NOON_COLOR: RGB<f64> = RGB::new(255.0, 254.0, 250.0);
         const END_OF_DAY_COLOR: RGB<f64> = RGB::new(255.0, 166.0, 87.0);
 
-        if let DayProgress::Day(day_progress) = self.day_progress(t) {
+        if let DayProgress::Day(t) = self.day_progress(now) {
             // blend
-            let sun_color = NOON_COLOR * (1.0 - day_progress) + END_OF_DAY_COLOR * day_progress;
+            let sun_color = if t < 0.5 {
+                // before noon
+                END_OF_DAY_COLOR * (1.0 - t) + NOON_COLOR * t
+            } else {
+                // after noon
+                NOON_COLOR * (1.0 - t) + END_OF_DAY_COLOR * t
+            };
 
             RGB::new(sun_color.r as u8, sun_color.g as u8, sun_color.b as u8)
         } else {

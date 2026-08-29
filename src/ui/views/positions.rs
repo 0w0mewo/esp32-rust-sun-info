@@ -3,8 +3,12 @@ extern crate alloc;
 use alloc::format;
 
 use crate::{
-    AstronDatetimeExt, HorizontalCoordinate, solar::SolarObject, ui::{
-        UpdateCmd, components::{CommonStatusTexts, Compass, DEG_SYM, MOON_SYM, PolarLine, SUN_SYM}, views::{DatetimeStatus, UpdateableFromCmd},
+    AstronDatetimeExt, HorizontalCoordinate,
+    solar::SolarObject,
+    ui::{
+        UpdateCmd,
+        components::{CommonStatusTexts, Compass, DEG_SYM, MOON_SYM, PolarLine, SUN_SYM},
+        views::{DatetimeStatus, UpdateableFromCmd},
     },
 };
 
@@ -140,7 +144,7 @@ impl Drawable for State {
                     .draw(target)
                     .unwrap_or_default();
             });
-        
+
         CommonStatusTexts::new(Point::zero(), &format!("{}", self)).draw(target)?;
 
         Ok(())
