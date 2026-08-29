@@ -109,7 +109,6 @@ impl Drawable for View {
             Self::Status(state) => state.draw(target),
             Self::Seasons(state) => state.draw(target),
         }
-
     }
 }
 
