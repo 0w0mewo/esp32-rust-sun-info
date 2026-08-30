@@ -146,7 +146,7 @@ async fn main(spawner: Spawner) -> ! {
             let brigtness = sun
                 .day_progress(&now_local.time)
                 .to_pwm_duty_cycle_percent()
-                .max(10);
+                .clamp(15, 100);
             let sun_color = sun.color_at(&now_local.time);
             board.set_rgb_led_color(sun_color, brigtness).await;
         }
