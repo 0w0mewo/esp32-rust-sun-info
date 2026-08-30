@@ -4,7 +4,7 @@ use embedded_graphics::{
     pixelcolor,
     prelude::*,
     primitives::{Circle, Line, StyledDrawable},
-    text::{Baseline, Text},
+    text::{Alignment, Baseline, Text},
 };
 use embedded_graphics_unicodefonts::{MONO_4X6, MONO_5X7, MONO_5X8};
 
@@ -141,11 +141,21 @@ impl Drawable for CommonStatusTexts<'_> {
 pub(crate) struct Compass {
     pub center: Point,
     pub diameter: u32,
+    altitude_mode: bool,
 }
 
 impl Compass {
     pub fn new(center: Point, diameter: u32) -> Self {
-        Self { center, diameter }
+        Self {
+            center,
+            diameter,
+            altitude_mode: true,
+        }
+    }
+
+    pub fn altitude_mode(mut self, enable: bool) -> Self {
+        self.altitude_mode = enable;
+        self
     }
 }
 
@@ -161,13 +171,40 @@ impl Drawable for Compass {
         let face = Circle::with_center(self.center, self.diameter);
         face.draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
 
-        for &(angle, angle_txt) in &[(0.0, "N"), (90.0, "E"), (180.0, "S"), (270.0, "W")] {
+        const AZIMUTH_DIRECTION_LABELS: [(f64, &str); 4] =
+            [(0.0, "N"), (90.0, "E"), (180.0, "S"), (270.0, "W")];
+        const ALTITUDE_DIRECTION_LABELS: [(f64, &str); 4] =
+            [(0.0, "|"), (90.0, "E"), (180.0, "|"), (270.0, "W")];
+
+        let label = if self.altitude_mode {
+            &ALTITUDE_DIRECTION_LABELS
+        } else {
+            &AZIMUTH_DIRECTION_LABELS
+        };
+
+        for &(angle, angle_txt) in label {
             let pos = polar(self.center, angle, 0.5 * self.diameter as f64 - 4.0);
             Text::with_baseline(
                 angle_txt,
                 pos,
                 MonoTextStyle::new(&MONO_4X6, pixelcolor::BinaryColor::On),
                 Baseline::Middle,
+            )
+            .draw(target)?;
+        }
+
+        // draw horizon line and ALT indicator
+        if self.altitude_mode {
+            let start = polar(self.center, 270.0, self.diameter as f64 * 0.5);
+            let end = polar(self.center, 90.0, self.diameter as f64 * 0.5);
+            Line::new(start, end).draw_styled(&PRIMITIVE_STYLE_DEFAULT, target)?;
+
+            // mode indicator
+            Text::with_alignment(
+                "ALT",
+                self.center + Point::new(0, 6),
+                MonoTextStyle::new(&MONO_4X6, pixelcolor::BinaryColor::On),
+                Alignment::Center,
             )
             .draw(target)?;
         }

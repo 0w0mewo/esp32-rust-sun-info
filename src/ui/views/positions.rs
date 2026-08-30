@@ -1,6 +1,13 @@
-use embedded_graphics::{Drawable, pixelcolor, prelude::*};
+use embedded_graphics::{
+    Drawable,
+    mono_font::MonoTextStyle,
+    pixelcolor,
+    prelude::*,
+    text::{Baseline, Text},
+};
 extern crate alloc;
 use alloc::format;
+use embedded_graphics_unicodefonts::MONO_5X7;
 
 use crate::{
     AstronDatetimeExt, HorizontalCoordinate,
@@ -21,6 +28,7 @@ pub struct State {
     pub(in crate::ui::views) sunset_azim: f64,
     pub(in crate::ui::views) moonrise_azim: f64,
     pub(in crate::ui::views) moonset_azim: f64,
+    pub(in crate::ui::views) altitude_view: bool,
 }
 
 impl UpdateableFromCmd for State {
@@ -52,6 +60,10 @@ impl UpdateableFromCmd for State {
                     self.sunset_azim = set_azim;
                 }
             },
+
+            UpdateCmd::SwitchView => {
+                self.altitude_view = !self.altitude_view;
+            }
 
             _ => {}
         }
@@ -100,19 +112,16 @@ impl Drawable for State {
     {
         let center = target.bounding_box().center() + Point::new(32, 0);
 
-        let compass = Compass::new(center, 64);
+        let compass = Compass::new(center, 64).altitude_mode(self.altitude_view);
         compass.draw(target)?;
 
-        // sun and moon azimuths, draw while it's above horizon
+        // sun and moon azimuths and altitudes, draw while it's above horizon
         let arm_len = 0.5 * compass.diameter as f64;
         [&self.sun_pos, &self.moon_pos]
             .into_iter()
             .enumerate()
             .filter(|(_, pos)| pos.altitude >= 0.0)
             .for_each(|(id, pos)| {
-                // the closer to zenith, the shorter the arm length
-                let arm_len = arm_len * (1.0 - (pos.altitude.abs() / 90.0));
-
                 // select symbol
                 let symb = match id {
                     0 => SUN_SYM,
@@ -120,30 +129,63 @@ impl Drawable for State {
                     _ => unreachable!(),
                 };
 
-                PolarLine::with_label(compass.center, pos.azimuth, arm_len, symb)
-                    .draw_line(false)
+                if self.altitude_view {
+                    // convert spherical coordinate to cartesian coordinates because the screen only
+                    // understands XY coordinates, and projects the converted XZ plane to the screen
+                    let pos = {
+                        let r = arm_len - 2.0;
+                        let az_rad = pos.azimuth.to_radians();
+                        let alt_rad = pos.altitude.to_radians();
+
+                        // x = r*sin(inclination)*sin(azimuth) = r*cos(declination)*sin(azimuth)
+                        // y = r*sin(inclination)*cos(azimuth) = r*cos(declination)*cos(azimuth)
+                        // z = r*cos(inclination) = r*sin(declination)
+                        let x = r * libm::cos(alt_rad) * libm::sin(az_rad);
+                        let z = -r * libm::sin(alt_rad);
+
+                        center + Point::new(libm::round(x) as i32, libm::round(z) as i32)
+                    };
+
+                    Text::with_baseline(
+                        symb,
+                        pos,
+                        MonoTextStyle::new(&MONO_5X7, pixelcolor::BinaryColor::On),
+                        Baseline::Middle,
+                    )
                     .draw(target)
                     .unwrap_or_default();
+                } else {
+                    // the closer to zenith, the shorter the arm length
+                    let arm_len = arm_len * (1.0 - (pos.altitude.abs() / 90.0));
+
+                    PolarLine::with_label(compass.center, pos.azimuth, arm_len, symb)
+                        .draw_line(false)
+                        .draw(target)
+                        .unwrap_or_default();
+                }
             });
 
-        // sunrise and sunset azimuth
-        [&self.sunrise_azim, &self.sunset_azim]
-            .into_iter()
-            .for_each(|&az| {
-                PolarLine::new(compass.center, az, arm_len)
-                    .draw(target)
-                    .unwrap_or_default();
-            });
+        // draw rise/set azimuth when it's not altitude view
+        if !self.altitude_view {
+            // sunrise and sunset azimuth
+            [&self.sunrise_azim, &self.sunset_azim]
+                .into_iter()
+                .for_each(|&az| {
+                    PolarLine::new(compass.center, az, arm_len)
+                        .draw(target)
+                        .unwrap_or_default();
+                });
 
-        // moonrise and moonset azimuth
-        [&self.moonrise_azim, &self.moonset_azim]
-            .into_iter()
-            .for_each(|&az| {
-                PolarLine::with_label(compass.center, az, arm_len, "m")
-                    .label_at_line_middle(true)
-                    .draw(target)
-                    .unwrap_or_default();
-            });
+            // moonrise and moonset azimuth
+            [&self.moonrise_azim, &self.moonset_azim]
+                .into_iter()
+                .for_each(|&az| {
+                    PolarLine::with_label(compass.center, az, arm_len, "m")
+                        .label_at_line_middle(true)
+                        .draw(target)
+                        .unwrap_or_default();
+                });
+        }
 
         CommonStatusTexts::new(Point::zero(), &format!("{}", self)).draw(target)?;
 
