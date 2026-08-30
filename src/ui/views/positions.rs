@@ -133,7 +133,7 @@ impl Drawable for State {
                     // convert spherical coordinate to cartesian coordinates because the screen only
                     // understands XY coordinates, and projects the converted XZ plane to the screen
                     let pos = {
-                        let r = arm_len - 2.0;
+                        let r = arm_len - 8.0;
                         let az_rad = pos.azimuth.to_radians();
                         let alt_rad = pos.altitude.to_radians();
 
