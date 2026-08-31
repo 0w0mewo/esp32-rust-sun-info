@@ -71,15 +71,28 @@ fn linker_be_nice() {
 }
 
 fn populate_configs() -> std::io::Result<()> {
+    use chrono::TimeZone;
+    use chrono_tz::OffsetComponents;
     use std::io::Write;
 
     let update_sec: u64 = env!("UPDATE_SEC").parse().unwrap_or(2);
     let lat: f64 = env!("LAT").parse().unwrap_or(-33.8651);
     let lon: f64 = env!("LON").parse().unwrap_or(151.2099);
 
-    // TODO: auto timezone selection from given latitude and longitude
-    let tz_offset_hrs: u8 = env!("TZ_OFFSET_HOURS").parse().unwrap_or(10);
-    let tz_offset_minutes: u8 = env!("TZ_OFFSET_MINUTES").parse().unwrap_or(0);
+    // find timezone offset seconds by lat and lon
+    let tz_finder = tzf_rs::DefaultFinder::new();
+    let tz = tz_finder.get_tz_name(lon, lat);
+    let tz = tz.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::UTC);
+    let now = chrono::Utc::now();
+    let tz_offset_secs = tz
+        .offset_from_utc_datetime(&now.naive_utc())
+        .base_utc_offset()
+        .as_seconds_f64();
+
+    // convert to hrs and minutes for fasttime library usage
+    let tz_offset_hrs = (tz_offset_secs / 3600.0) as i8;
+    let tz_offset_minutes = (tz_offset_secs % 60.0) as u8;
+    let tz_sign_postive = tz_offset_hrs > 0;
 
     let mut config_rs = std::fs::File::options()
         .write(true)
@@ -94,8 +107,10 @@ fn populate_configs() -> std::io::Result<()> {
 pub const UPDATE_SEC: u64 = {update_sec};
 pub const LAT: f64 = {lat};
 pub const LON: f64 = {lon};
+pub const TZ_SIGN_POSTIVE: bool = {tz_sign_postive};
 pub const TZ_OFFSET_HOURS: u8 = {tz_offset_hrs};
-pub const TZ_OFFSET_MINUTES: u8 = {tz_offset_minutes};"#
+pub const TZ_OFFSET_MINUTES: u8 = {tz_offset_minutes};
+"#
     )?;
 
     Ok(())

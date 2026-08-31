@@ -14,6 +14,7 @@ use embassy_time::Instant;
 use embassy_time::Ticker;
 use embassy_time::Timer;
 use esp_hal::gpio;
+use esp32_sun_info::config::TZ_SIGN_POSTIVE;
 use esp32_sun_info as lib;
 use lib::config::{LAT, LON, TZ_OFFSET_HOURS, TZ_OFFSET_MINUTES, UPDATE_SEC};
 
@@ -66,7 +67,7 @@ async fn main(spawner: Spawner) -> ! {
 
     // sunrise calc
     let tz_offset =
-        UtcOffset::from_hours_minutes(TZ_OFFSET_HOURS > 0, TZ_OFFSET_HOURS, TZ_OFFSET_MINUTES)
+        UtcOffset::from_hours_minutes(TZ_SIGN_POSTIVE, TZ_OFFSET_HOURS, TZ_OFFSET_MINUTES)
             .unwrap();
     let mut sun = Sun::default();
     let mut moon = Moon::default();
