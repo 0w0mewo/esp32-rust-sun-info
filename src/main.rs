@@ -15,6 +15,7 @@ use embassy_time::Ticker;
 use embassy_time::Timer;
 use esp_hal::gpio;
 use esp32_sun_info as lib;
+use lib::config::{LAT, LON, TZ_OFFSET_HOURS, TZ_OFFSET_MINUTES, UPDATE_SEC};
 
 use embassy_time::Duration;
 use esp_backtrace as _;
@@ -31,12 +32,6 @@ use lib::ui::Ui;
 use lib::ui::ui_flush_task;
 use lib::ui::{self};
 extern crate alloc;
-
-const UPDATE_SEC: u64 = 2;
-const LAT: f64 = -33.8651;
-const LON: f64 = 151.2099;
-const TZ_OFFSET_HOURS: u8 = 10;
-const TZ_OFFSET_MINUTES: u8 = 0;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 

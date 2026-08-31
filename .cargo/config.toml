@@ -5,6 +5,11 @@ runner = "espflash flash --monitor --chip esp32"
 WIFI_SSID = ""
 WIFI_PSWD = ""
 NTP_SERVER="pool.ntp.org"
+UPDATE_SEC="2"
+LAT=""
+LON=""
+TZ_OFFSET_HOURS=""
+TZ_OFFSET_MINUTES="0"
 
 [build]
 rustflags = [

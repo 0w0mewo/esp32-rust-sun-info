@@ -1,5 +1,6 @@
 #![no_std]
 pub mod board;
+pub mod config;
 pub mod events;
 pub mod ntp;
 pub mod solar;
