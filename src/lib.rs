@@ -25,10 +25,10 @@ pub type SSD1306<DI> = ssd1306::Ssd1306Async<
     ssd1306::mode::BufferedGraphicsModeAsync<ssd1306::size::DisplaySize128x64>,
 >;
 
-use core::f64::consts::PI;
+use core::{f64::consts::PI};
 
 use esp_hal::rng;
-use fasttime::{Date, DateTime, Time};
+use fasttime::{Date, DateTime, Time, Weekday};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 #[derive(Debug, thiserror::Error)]
@@ -86,15 +86,67 @@ pub trait AstronDatetimeExt: DateExt {
 }
 
 pub trait DateExt {
+    /// year
+    fn year(&self) -> i32;
+
+    /// month
+    fn month(&self) -> u8;
+
+    /// day
+    fn day(&self) -> u8;
+
     /// is the current year leap year
     fn is_leap_year(&self) -> bool;
 
     /// decimal year
-    fn decimal_year(&self) -> f64;
+    fn decimal_year(&self) -> f64 {
+        self.decimal_year_with_offset_days(0.0)
+    }
+
+    /// decimal year by today with `offset` days
+    fn decimal_year_with_offset_days(&self, offset: f64) -> f64;
+
+    /// the day of n-th weekday of the current month, return `None` if it's outside this month
+    fn nth_weekday(&self, weekday: Weekday, n: u8) -> Option<u8>;
+
+    /// the day of first occurence weekday of the current month
+    fn first_weekday(&self, weekday: Weekday) -> u8 {
+        self.nth_weekday(weekday, 1).unwrap()
+    }
+
+    /// the day of the last occurence weekday of the current month
+    fn last_weekday(&self, weekday: Weekday) -> u8;
+
+    /// the date of n-th weekday of the current month, return `None` if it's outside this month
+    fn nth_weekday_date(&self, weekday: Weekday, n: u8) -> Option<Date> {
+        self.nth_weekday(weekday, n)
+            .map(|d| Date::from_ymd_unchecked(self.year(), self.month(), d))
+    }
+
+    /// the date of first occurence weekday of the current month
+    fn first_weekday_date(&self, weekday: Weekday) -> Date {
+        Date::from_ymd_unchecked(self.year(), self.month(), self.first_weekday(weekday))
+    }
+
+    /// the date of the last occurence weekday of the current month
+    fn last_weekday_date(&self, weekday: Weekday) -> Date {
+        Date::from_ymd_unchecked(self.year(), self.month(), self.last_weekday(weekday))
+    }
 
     /// how many days in the current year, 366 days if it's leap year, 365 days otherwise
     fn days_per_year(&self) -> u16 {
         if self.is_leap_year() { 366 } else { 365 }
+    }
+
+    /// how many days in the current month
+    fn days_per_month(&self) -> u8 {
+        // derived from a private function days_in_month() in fasttime crate
+        let month = self.month();
+        if month == 2 {
+            if self.is_leap_year() { 29 } else { 28 }
+        } else {
+            30 | (month ^ (month >> 3))
+        }
     }
 }
 
@@ -124,8 +176,31 @@ impl DateExt for DateTime {
         self.date.is_leap_year()
     }
 
-    fn decimal_year(&self) -> f64 {
-        self.date.decimal_year()
+    fn decimal_year_with_offset_days(&self, offset: f64) -> f64 {
+        self.date.decimal_year_with_offset_days(offset)
+    }
+
+    fn nth_weekday(&self, weekday: Weekday, n: u8) -> Option<u8> {
+        self.date.nth_weekday(weekday, n)
+    }
+
+    fn last_weekday(&self, weekday: Weekday) -> u8 {
+        self.date.last_weekday(weekday)
+    }
+
+    #[inline]
+    fn year(&self) -> i32 {
+        self.date.year()
+    }
+
+    #[inline]
+    fn month(&self) -> u8 {
+        self.date.month()
+    }
+
+    #[inline]
+    fn day(&self) -> u8 {
+        self.date.day()
     }
 }
 
@@ -136,8 +211,52 @@ impl DateExt for Date {
         (year & if century_candidate { 15 } else { 3 }) == 0
     }
 
-    fn decimal_year(&self) -> f64 {
-        self.ordinal() as f64 / self.days_per_year() as f64 + self.year as f64
+    fn decimal_year_with_offset_days(&self, offset: f64) -> f64 {
+        (self.ordinal() as f64 + offset) / self.days_per_year() as f64 + self.year as f64
+    }
+
+    /// derived from https://rosettacode.org/wiki/Nth_Particular_Weekday_of_the_Month
+    fn nth_weekday(&self, weekday: Weekday, n: u8) -> Option<u8> {
+        let first_weekday = Date::from_ymd_unchecked(self.year, self.month, 1)
+            .weekday()
+            .number_from_monday() as i8;
+        let weekday = weekday.number_from_monday() as i8;
+
+        // 1 + first occurence + n-th occurence
+        // let target_day = 1 + (weekday - first_weekday) + (n as i8 - 1) * 7;
+        let target_day =
+            1 + (weekday - first_weekday) % 7 + 7 * (n as i8 - (first_weekday <= weekday) as i8);
+        if target_day as u8 > self.days_per_month() {
+            None
+        } else {
+            Some(target_day as u8)
+        }
+    }
+
+    fn last_weekday(&self, weekday: Weekday) -> u8 {
+        let last_date = Date::from_ymd_unchecked(self.year, self.month, self.days_per_month());
+        let last_weekday = last_date.weekday().number_from_monday() as i8;
+        let weekday = weekday.number_from_monday() as i8;
+
+        let days_diff = (weekday - last_weekday) % 7;
+        let days_back = if days_diff < 0 { days_diff } else { 7 } - days_diff;
+
+        (last_date.day as i8 - days_back) as u8
+    }
+
+    #[inline]
+    fn year(&self) -> i32 {
+        self.year
+    }
+
+    #[inline]
+    fn month(&self) -> u8 {
+        self.month
+    }
+
+    #[inline]
+    fn day(&self) -> u8 {
+        self.day
     }
 }
 

@@ -76,12 +76,6 @@ pub struct Moon {
     pos: HorizontalCoordinate,
 }
 
-/// get decimal year by today with `offset` days
-#[inline]
-fn decimal_year(now: &DateTime, offset: f64) -> f64 {
-    (now.date.ordinal() as f64 + offset) / now.days_per_year() as f64 + now.date.year as f64
-}
-
 impl PlanetUpdater for Moon {
     fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
         self.pos = get_pos(&now.utc, lat, lon, SolarObject::Moon);
@@ -102,8 +96,10 @@ impl PlanetUpdater for Moon {
         // push back one lunar period and re-calculate it if the day is in the future.
         let mut jd_last_new_moon = moon_phase_jd(now_utc.decimal_year(), Phase::New);
         if jd_last_new_moon > jd_now_utc {
-            jd_last_new_moon =
-                moon_phase_jd(decimal_year(now_utc, -LUNAR_ORBIT_PERIOD_AVG), Phase::New);
+            jd_last_new_moon = moon_phase_jd(
+                now_utc.decimal_year_with_offset_days(-LUNAR_ORBIT_PERIOD_AVG),
+                Phase::New,
+            );
         }
 
         // moonrise and moonset
@@ -384,9 +380,12 @@ fn moon_phase_jd(decimal_year: f64, phase: Phase) -> f64 {
 
 fn upcoming_moon_phase_jd(now: &DateTime, phase: Phase) -> f64 {
     let jd_now_utc = now.to_julian();
-    let mut jd_phase_utc = moon_phase_jd(decimal_year(now, 0.0), phase);
+    let mut jd_phase_utc = moon_phase_jd(now.decimal_year(), phase);
     if jd_now_utc > jd_phase_utc {
-        jd_phase_utc = moon_phase_jd(decimal_year(now, LUNAR_ORBIT_PERIOD_AVG), phase);
+        jd_phase_utc = moon_phase_jd(
+            now.decimal_year_with_offset_days(LUNAR_ORBIT_PERIOD_AVG),
+            phase,
+        );
     }
 
     jd_phase_utc
