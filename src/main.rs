@@ -80,16 +80,6 @@ async fn main(spawner: Spawner) -> ! {
     // the default UI view is the status page, switch to other view here after everything is ready
     ui::UpdateCmd::next_view().await;
 
-    (1..12).map(|m| fasttime::Date::from_ymd_unchecked(2026, m, 1)).for_each(|date| {
-        use lib::DateExt;
-        let last_sun = date.last_weekday_date(fasttime::Weekday::Sunday);
-        let first_sun = date.first_weekday_date(fasttime::Weekday::Sunday);
-        let last_fri = date.last_weekday_date(fasttime::Weekday::Friday);
-        let last_thur = date.last_weekday_date(fasttime::Weekday::Thursday);
-
-        println!("{date} - first sun {first_sun}, last sun {last_sun}, last thur {last_thur} ,last fri {last_fri}");
-    });
-
     loop {
         let rtc_now = board.rtc.current_time_us();
         if let Ok(utc_now) = DateTime::from_unix_timestamp(
