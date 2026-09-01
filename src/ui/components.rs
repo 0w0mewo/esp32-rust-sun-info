@@ -48,13 +48,6 @@ impl<'a> PolarLine<'a> {
         self.label_at_mid = enable;
         self
     }
-
-    /// should draw line
-    pub fn draw_line(mut self, enable: bool) -> Self {
-        self.has_line = enable;
-
-        self
-    }
 }
 
 impl Drawable for PolarLine<'_> {

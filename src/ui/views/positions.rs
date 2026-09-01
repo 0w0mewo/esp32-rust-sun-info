@@ -8,6 +8,7 @@ use embedded_graphics::{
 extern crate alloc;
 use alloc::format;
 use embedded_graphics_unicodefonts::MONO_5X7;
+use libm::{round, sincos};
 
 use crate::{
     AstronDatetimeExt, HorizontalCoordinate,
@@ -129,40 +130,37 @@ impl Drawable for State {
                     _ => unreachable!(),
                 };
 
-                if self.altitude_view {
-                    // convert spherical coordinate to cartesian coordinates because the screen only
-                    // understands XY coordinates, and projects the converted XZ plane to the screen
-                    let pos = {
-                        let r = arm_len - 8.0;
-                        let az_rad = pos.azimuth.to_radians();
-                        let alt_rad = pos.altitude.to_radians();
+                let az_rad = pos.azimuth.to_radians();
+                let alt_rad = pos.altitude.to_radians();
+                let (alt_sin, alt_cos) = sincos(alt_rad);
+                let (az_sin, az_cos) = sincos(az_rad);
 
-                        // x = r*sin(inclination)*sin(azimuth) = r*cos(declination)*sin(azimuth)
-                        // y = r*sin(inclination)*cos(azimuth) = r*cos(declination)*cos(azimuth)
-                        // z = r*cos(inclination) = r*sin(declination)
-                        let x = r * libm::cos(alt_rad) * libm::sin(az_rad);
-                        let z = -r * libm::sin(alt_rad);
+                // convert spherical coordinate to cartesian coordinates for simple 2D projection on
+                // screen
+                // x = r*sin(inclination)*sin(azimuth) = r*cos(declination)*sin(azimuth)
+                // y = r*sin(inclination)*cos(azimuth) = r*cos(declination)*cos(azimuth)
+                // z = r*cos(inclination) = r*sin(declination)
+                let r = arm_len - 3.0;
+                let x = r * alt_cos * az_sin;
+                let y = -r * alt_cos * az_cos;
+                let z = -r * alt_sin;
 
-                        center + Point::new(libm::round(x) as i32, libm::round(z) as i32)
+                // projects the converted XZ plane to the screen in altitude view,
+                // XY plane in azimuth view
+                let pos = center
+                    + if self.altitude_view {
+                        Point::new(round(x) as i32, round(z) as i32)
+                    } else {
+                        Point::new(round(x) as i32, round(y) as i32)
                     };
-
-                    Text::with_baseline(
-                        symb,
-                        pos,
-                        MonoTextStyle::new(&MONO_5X7, pixelcolor::BinaryColor::On),
-                        Baseline::Middle,
-                    )
-                    .draw(target)
-                    .unwrap_or_default();
-                } else {
-                    // the closer to zenith, the shorter the arm length
-                    let arm_len = arm_len * (1.0 - (pos.altitude.abs() / 90.0));
-
-                    PolarLine::with_label(compass.center, pos.azimuth, arm_len, symb)
-                        .draw_line(false)
-                        .draw(target)
-                        .unwrap_or_default();
-                }
+                Text::with_baseline(
+                    symb,
+                    pos,
+                    MonoTextStyle::new(&MONO_5X7, pixelcolor::BinaryColor::On),
+                    Baseline::Middle,
+                )
+                .draw(target)
+                .unwrap_or_default();
             });
 
         // draw rise/set azimuth when it's not altitude view
