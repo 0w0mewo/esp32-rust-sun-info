@@ -1,5 +1,5 @@
 use crate::{
-    D2000, MIDNIGHT,
+    datetime::DateExt,
     events::NtpStatus,
     ui::{UpdateCmd, UpdateableFromCmd, components::CommonStatusTexts},
 };
@@ -33,7 +33,7 @@ impl Default for DatetimeStatus {
         Self {
             last_ntp_status: Default::default(),
             datetime: OffsetDateTime::from_utc(
-                DateTime::new(D2000, MIDNIGHT),
+                DateTime::default(),
                 UtcOffset::from_seconds(0).unwrap(),
             ),
         }

@@ -3,8 +3,8 @@ use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
-    AstronDatetimeExt, DateExt, HorizontalCoordinate, J2000, SECONDS_PER_DAY, altitude,
-    astro_refraction, delta_t_2000, sidereal_time,
+    HorizontalCoordinate, SECONDS_PER_DAY, altitude, astro_refraction,
+    datetime::{AstronDatetimeExt, DateExt, J2000, delta_t_2000, sidereal_time},
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
@@ -645,7 +645,7 @@ fn moon_altitude(jde: f64, lst_rad: f64, lat_rad: f64) -> f64 {
 /// find upcoming moon rise and set JD by brute forcing the crossing point
 fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option<f64>) {
     let lat_rad = lat.to_radians();
-    let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
+    let dt = now_utc.delta_t(); // delta T is in days
 
     // initial states
     let jd_today = now_utc.to_julian_epoch_2000();

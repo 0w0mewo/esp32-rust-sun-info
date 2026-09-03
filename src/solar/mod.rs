@@ -1,8 +1,9 @@
-use fasttime::{DateTime, OffsetDateTime};
+use fasttime::OffsetDateTime;
 use libm::{asin, cos};
 
 use crate::{
-    AstronDatetimeExt, DateExt, HorizontalCoordinate, delta_t_2000,
+    HorizontalCoordinate,
+    datetime::AstronDatetimeExt,
     solar::{moon::moon_coord, sun::sun_coord},
 };
 
@@ -16,10 +17,15 @@ pub enum SolarObject {
 }
 
 /// ported from SunCalc: https://github.com/mourner/suncalc
-fn get_pos(now_utc: &DateTime, lat: f64, lon: f64, obj: SolarObject) -> HorizontalCoordinate {
+fn get_pos<DT: AstronDatetimeExt>(
+    now_utc: &DT,
+    lat: f64,
+    lon: f64,
+    obj: SolarObject,
+) -> HorizontalCoordinate {
     let phi = lat.to_radians();
     let local_sidereal_time = now_utc.to_sidereal_time(lon).to_radians();
-    let dt = delta_t_2000(now_utc.decimal_year()); // delta T is in days
+    let dt = now_utc.delta_t(); // delta T is in days
 
     let jde = now_utc.to_julian_epoch_2000();
     let jde = jde + dt;

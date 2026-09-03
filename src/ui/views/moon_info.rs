@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::format;
 
 use crate::{
-    D2000,
+    datetime::D2000,
     solar::{SolarObject, moon},
     ui::{
         UpdateCmd,

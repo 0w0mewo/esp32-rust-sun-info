@@ -11,7 +11,8 @@ use embedded_graphics_unicodefonts::MONO_5X7;
 use libm::{round, sincos};
 
 use crate::{
-    AstronDatetimeExt, HorizontalCoordinate,
+    HorizontalCoordinate,
+    datetime::AstronDatetimeExt,
     solar::SolarObject,
     ui::{
         UpdateCmd,

@@ -1,8 +1,8 @@
+use crate::datetime::MIDNIGHT;
 use crate::solar::SolarObject;
 use crate::ui::components::DEG_SYM;
 use crate::ui::views::TextBasedView;
 use crate::{
-    MIDNIGHT,
     solar::sun,
     ui::{
         UpdateCmd,

@@ -4,7 +4,8 @@ use libm::{acos, asin, atan2, cos, floor, round, sin, sincos, tan};
 use smart_leds::{RGB, RGB8};
 
 use crate::{
-    DAYS_PER_JULIAN_CENTURY, DateExt, HorizontalCoordinate, J2000, SECONDS_PER_DAY, delta_t_2000,
+    DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate, SECONDS_PER_DAY,
+    datetime::{DateExt, J2000, delta_t_2000},
     solar::{PlanetUpdater, SolarObject, get_pos},
 };
 
