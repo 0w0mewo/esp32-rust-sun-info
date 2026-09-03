@@ -246,11 +246,29 @@ impl DateExt for Date {
 
 /// Espenak & Meeus polynomial of delta T for 2005 to 2050,
 /// return delta T in days.
-/// `y`: decimal year between 2005.0 to 2050.0
+/// `y`: decimal year between 2000.0 to 3000.0
+/// https://www.eclipsewise.com/help/deltatpoly2014.html
 pub fn delta_t_2000(y: f64) -> f64 {
-    let t = y - 2000.0;
+    let dt_sec = if y < 2005.0 {
+        // 1986 to 2005
+        let t = y - 2000.0;
+        let t2 = t * t;
+        let t3 = t2 * t;
+        let t4 = t3 * t;
+        let t5 = t4 * t;
 
-    (62.92 + 0.32217 * t + 0.005589 * t * t) / SECONDS_PER_DAY
+        63.86 + 0.3345 * t - 0.060374 * t2 + 0.0017275 * t3 + 0.000651814 * t4 + 0.00002373599 * t5
+    } else if y < 2015.0 {
+        // 2005 to 2015
+        let t = y - 2005.0;
+        64.69 + 0.2930 * t
+    } else {
+        // 2015 to 3000
+        let t = y - 2015.0;
+        67.62 + 0.3645 * t + 0.0039755 * t * t
+    };
+
+    dt_sec / SECONDS_PER_DAY
 }
 
 /// local sidereal time in degrees, `jd2000` is the julian day epoch since J2000
