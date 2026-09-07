@@ -117,12 +117,11 @@ impl Drawable for State {
         let compass = Compass::new(center, 64).altitude_mode(self.altitude_view);
         compass.draw(target)?;
 
-        // sun and moon azimuths and altitudes, draw while it's above horizon
+        // sun and moon azimuths and altitudes
         let arm_len = 0.5 * compass.diameter as f64;
         [&self.sun_pos, &self.moon_pos]
             .into_iter()
             .enumerate()
-            .filter(|(_, pos)| pos.altitude >= 0.0)
             .for_each(|(id, pos)| {
                 // select symbol
                 let symb = match id {
