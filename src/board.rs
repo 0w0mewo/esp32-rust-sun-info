@@ -122,22 +122,17 @@ impl Board {
         };
 
         // RGB led
-        let rmt = rmt::Rmt::new(perip.RMT, Rate::from_mhz(80))
+        let freq = Rate::from_mhz(80);
+        let rmt = rmt::Rmt::new(perip.RMT, freq)
             .unwrap()
             .into_async();
-        let mut rgb_led: esp_hal_smartled::RmtSmartLeds<
+        let rgb_led: esp_hal_smartled::RmtSmartLeds<
             '_,
             { esp_hal_smartled::buffer_size::<RGB8>(1) },
             esp_hal::Async,
             RGB8,
             esp_hal_smartled::color_order::Grb,
-        > = esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, perip.GPIO33)
-            .unwrap();
-        // turn it off
-        rgb_led
-            .write([RGB8::new(0, 0, 0)])
-            .into_future()
-            .await
+        > = esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, perip.GPIO33, freq)
             .unwrap();
 
         // button
@@ -188,7 +183,6 @@ impl Board {
     pub async fn set_rgb_led_color(&mut self, color: RGB8, b: u8) {
         self.rgb_led
             .write(brightness(gamma([color].into_iter()), b))
-            .into_future()
             .await
             .unwrap_or_default();
     }
