@@ -123,9 +123,7 @@ impl Board {
 
         // RGB led
         let freq = Rate::from_mhz(80);
-        let rmt = rmt::Rmt::new(perip.RMT, freq)
-            .unwrap()
-            .into_async();
+        let rmt = rmt::Rmt::new(perip.RMT, freq).unwrap().into_async();
         let rgb_led: esp_hal_smartled::RmtSmartLeds<
             '_,
             { esp_hal_smartled::buffer_size::<RGB8>(1) },
@@ -146,7 +144,7 @@ impl Board {
         // setup for embassy
         esp_rtos::start(
             timg::TimerGroup::new(perip.TIMG0).timer0,
-            perip.FROM_CPU_INTR0
+            perip.FROM_CPU_INTR0,
         );
 
         // setup wifi and network stack
@@ -276,10 +274,14 @@ fn wifi_setup(
     spawner: &embassy_executor::Spawner,
 ) -> embassy_net::Stack<'static> {
     // setup wifi controller
-    let wifi_controller = wifi::WifiController::new(wifi_peri,
+    let wifi_controller = wifi::WifiController::new(
+        wifi_peri,
         wifi::ControllerConfig::default().with_initial_config(wifi::Config::Station(
             wifi::sta::StationConfig::default()
-                .with_ssid(SSID.try_into().unwrap()).with_authentication(wifi::AuthenticationMethodConfig::Wpa2Personal(PSWD.try_into().unwrap()))
+                .with_ssid(SSID.try_into().unwrap())
+                .with_authentication(wifi::AuthenticationMethodConfig::Wpa2Personal(
+                    PSWD.try_into().unwrap(),
+                )),
         )),
     )
     .expect("Failed to initialize Wi-Fi controller");
