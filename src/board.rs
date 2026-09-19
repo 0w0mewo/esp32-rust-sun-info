@@ -10,7 +10,7 @@ use embassy_sync::mutex::Mutex as MutexAsync;
 use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::time::Rate;
-use esp_hal::{gpio, interrupt::software::SoftwareInterruptControl, rtc_cntl, time, timer::timg};
+use esp_hal::{gpio, rtc_cntl, time, timer::timg};
 use esp_hal::{i2c, rmt};
 use esp_println::println;
 use esp_radio::wifi;
@@ -94,7 +94,7 @@ impl Board {
         esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 98768);
 
         // RTC peripheral
-        let mut rtc = rtc_cntl::Rtc::new(perip.LPWR);
+        let mut rtc = rtc_cntl::Rtc::new(perip.RTC_TIMER);
         rtc.rwdt.disable();
         let rtc = Rc::new(rtc);
 
@@ -151,7 +151,7 @@ impl Board {
         // setup for embassy
         esp_rtos::start(
             timg::TimerGroup::new(perip.TIMG0).timer0,
-            SoftwareInterruptControl::new(perip.SW_INTERRUPT).software_interrupt0,
+            perip.FROM_CPU_INTR0
         );
 
         // setup wifi and network stack
@@ -245,7 +245,7 @@ async fn wifi_connection_task(mut controller: wifi::WifiController<'static>) {
     }
 }
 #[embassy_executor::task]
-async fn network_stack_task(mut runner: embassy_net::Runner<'static, wifi::Interface<'static>>) {
+async fn network_stack_task(mut runner: embassy_net::Runner<'static, wifi::Interface>) {
     runner.run().await;
 }
 
@@ -282,16 +282,14 @@ fn wifi_setup(
     spawner: &embassy_executor::Spawner,
 ) -> embassy_net::Stack<'static> {
     // setup wifi controller
-    let (wifi_controller, wifi_intfs) = wifi::new(
-        wifi_peri,
+    let wifi_controller = wifi::WifiController::new(wifi_peri,
         wifi::ControllerConfig::default().with_initial_config(wifi::Config::Station(
             wifi::sta::StationConfig::default()
-                .with_ssid(SSID)
-                .with_password(PSWD.into()),
+                .with_ssid(SSID.try_into().unwrap()).with_authentication(wifi::AuthenticationMethodConfig::Wpa2Personal(PSWD.try_into().unwrap()))
         )),
     )
     .expect("Failed to initialize Wi-Fi controller");
-    let wifi_sta_intf = wifi_intfs.station;
+    let wifi_sta_intf = wifi::Interface::station();
 
     // embassy network stack init
     let res = {

@@ -16,22 +16,22 @@ ws2812b = []
 sk68 = []
 
 [dependencies]
-esp-hal = { version = "~1.1.0", features = ["esp32", "unstable"] }
-esp-backtrace = { version = "~0.19.0", features = [
+esp-hal = { version = "~1.2", features = ["esp32", "unstable"] }
+esp-backtrace = { version = "~0.20.0", features = [
     "esp32",
     "panic-handler",
     "println",
 ], default-features = false }
-esp-rtos = { version = "0.3.0", features = [
+esp-rtos = { version = "0.4.0", features = [
   "embassy",
   "esp-alloc",
   "esp-radio",
   "esp32",
 ] }
-esp-bootloader-esp-idf = { version = "0.5.0", features = ["esp32"] }
-esp-println = { version = "0.17.0", features = ["esp32"] }
-esp-alloc = "0.10.0"
-esp-radio = { version = "0.18.0", features = [
+esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32"] }
+esp-println = { version = "0.18.0", features = ["esp32"] }
+esp-alloc = "0.11.0"
+esp-radio = { version = "1.0.0-beta.1", features = [
   "esp-alloc",
   "esp32",
   "unstable",
@@ -74,7 +74,7 @@ display-interface = "0.5.0"
 
 # RGB LED
 smart-leds = "0.4"
-esp-hal-smartled2 = { version = "0.29", features = ["esp32"] }
+esp-hal-smartled2 = { git = "https://github.com/0w0mewo/esp-hal-smartled.git", branch = "esp-hal-1.2", version = "0.29", features = ["esp32"] }
 
 [build-dependencies]
 chrono = { version = "0.4" }
