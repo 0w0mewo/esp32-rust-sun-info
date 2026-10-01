@@ -143,17 +143,13 @@ impl SolarObject {
             hour_offset += 2.0;
         }
 
-        let rise = jd_rise.map(|jd| {
+        let to_event_info = |jd| {
             let HorizontalCoordinate { azimuth, .. } = self.get_pos(jd, delta_t, lat, lon);
 
             EventInfo { jd, azimuth }
-        });
-
-        let set = jd_set.map(|jd| {
-            let HorizontalCoordinate { azimuth, .. } = self.get_pos(jd, delta_t, lat, lon);
-
-            EventInfo { jd, azimuth }
-        });
+        };
+        let rise = jd_rise.map(to_event_info);
+        let set = jd_set.map(to_event_info);
 
         (rise, set)
     }
