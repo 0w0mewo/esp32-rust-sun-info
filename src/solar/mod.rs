@@ -23,8 +23,9 @@ fn get_pos<DT: AstronDatetimeExt>(
     lon: f64,
     obj: SolarObject,
 ) -> HorizontalCoordinate {
-    let phi = lat.to_radians();
-    let local_sidereal_time = now_utc.to_sidereal_time(lon).to_radians();
+    let lat_rad = lat.to_radians();
+    let lon_rad = lon.to_radians();
+    let lst = now_utc.to_sidereal_time(lon_rad);
     let dt = now_utc.delta_t(); // delta T is in days
 
     let jde = now_utc.to_julian_epoch_2000();
@@ -36,9 +37,9 @@ fn get_pos<DT: AstronDatetimeExt>(
             (ra, dec, 0.0)
         }
     };
-    let hour_angle = local_sidereal_time - ra;
+    let hour_angle = lst - ra;
 
-    let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, phi, dec);
+    let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, lat_rad, dec);
     if let SolarObject::Moon = obj {
         let altitude_geocentric_rad = pos.altitude.to_radians();
         pos.altitude = (altitude_geocentric_rad

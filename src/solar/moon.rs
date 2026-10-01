@@ -3,9 +3,10 @@ use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
-    HorizontalCoordinate, SECONDS_PER_DAY, altitude, astro_refraction,
-    datetime::{AstronDatetimeExt, DateExt, J2000, delta_t_2000, sidereal_time},
-    solar::{PlanetUpdater, SolarObject, get_pos},
+    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, DateExt, J2000, delta_t_2000, sidereal_time},
+    sine_altitude,
+    solar::{PlanetUpdater, SolarObject, get_pos },
 };
 
 const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;
@@ -104,7 +105,8 @@ impl PlanetUpdater for Moon {
 
         // moonrise and moonset
         // Note: use get_pos here instead of in moon_rise_set() to save some time on heavy compuation
-        let (rise_jd, set_jd) = moon_rise_set(now_utc, lat, lon);
+        let delta_t = now_utc.delta_t();
+        let (rise_jd, set_jd) = moon_rise_set(jd_now_utc, delta_t, lat, lon);
         self.moonrise = rise_jd.map(|rise_jd_utc| {
             HorizontalCoordinate {
                 azimuth: self.rise_azim,
@@ -631,57 +633,71 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
     (dpsi, eps)
 }
 
-fn moon_altitude(jde: f64, lst_rad: f64, lat_rad: f64) -> f64 {
-    let (ra_rad, dec_rad, dist) = moon_coord(jde);
-    let ha_rad = lst_rad - ra_rad;
-
-    let mut alt = altitude(dec_rad, lat_rad, ha_rad);
-    alt -= asin(6378.14 / dist * cos(alt));
-    alt = alt.to_degrees();
-
-    alt + astro_refraction(alt)
-}
-
 /// find upcoming moon rise and set JD by brute forcing the crossing point
-fn moon_rise_set(now_utc: &DateTime, lat: f64, lon: f64) -> (Option<f64>, Option<f64>) {
+/// derive from 'Astronomy on the Personal Computer, ch 3'
+fn moon_rise_set(jd: f64, delta_t: f64, lat: f64, lon: f64) -> (Option<f64>, Option<f64>) {
     let lat_rad = lat.to_radians();
-    let dt = now_utc.delta_t(); // delta T is in days
+    let lon_rad = lon.to_radians();
+    let jd0 = floor(jd) + 0.5;
+    
+    // refraction for moon
+    let refracted_sine_altitude = sin((8.0_f64 / 60.0).to_radians());
 
-    // initial states
-    let jd_today = now_utc.to_julian_epoch_2000();
-    let jd_end = jd_today + 1.0;
-    let step = 60.0 / SECONDS_PER_DAY;
+    let mut jd_rise = None;
+    let mut jd_set = None;
 
-    let mut found_rise = false;
-    let mut found_set = false;
+    let mut quadratic = QuadraticInterpolator::default();
 
-    let mut rise_jd = None;
-    let mut set_jd = None;
+    // moon sine altitude of given hour offset of JD0
+    let moon_sin_altitude = |hr: f64| {
+        let jd = jd0 + hr * DAY_PER_HOUR;
 
-    let mut jd = jd_today - 1.0;
-    let mut lst_rad = sidereal_time(jd, lon).to_radians();
-    let mut prev_alt = moon_altitude(jd + dt, lst_rad, lat_rad);
-    while jd <= jd_end {
-        lst_rad = sidereal_time(jd, lon).to_radians();
-        let alt = moon_altitude(jd + dt, lst_rad, lat_rad);
+        let (ra_rad, dec_rad,_) = moon_coord(jd - J2000 + delta_t);
+        let hr_angle_rad = sidereal_time(jd, lon_rad) - ra_rad;
 
-        if !found_rise && prev_alt < 0.0 && alt > 0.0 && jd > jd_today {
-            rise_jd = Some(jd + J2000);
-            found_rise = true;
+        sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_altitude
+    };
+
+    // search for rise/set in 24 hours interval
+    let mut hour_offset = 1.0;
+    let mut y_minus = moon_sin_altitude(0.0);
+    while hour_offset < 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
+        let y0 = moon_sin_altitude(hour_offset);
+        let y_plus = moon_sin_altitude(hour_offset + 1.0);
+
+        // searching altitude = 0 degree by searching y = 0 where y might between y_minus, y0 and y_plus
+        quadratic.fit(y_minus, y0, y_plus);
+        if let Some(roots) = quadratic.roots() {
+            match roots {
+                QuadraticRoots::One { root } => {
+                    let t = hour_offset + root;
+                    let t = t * DAY_PER_HOUR + jd0;
+                    if y_minus < 0.0 {
+                        jd_rise.replace(t);
+                    } else {
+                        jd_set.replace(t);
+                    }
+                }
+                QuadraticRoots::Two { root1, root2 } => {
+                    let t1 = hour_offset + root1;
+                    let t1 = t1 * DAY_PER_HOUR + jd0;
+                    let t2 = hour_offset + root2;
+                    let t2 = t2 * DAY_PER_HOUR + jd0;
+                    if quadratic.y_extremum() < 0.0 {
+                        jd_rise.replace(t2);
+                        jd_set.replace(t1);
+                    } else {
+                        jd_rise.replace(t1);
+                        jd_set.replace(t2);
+                    }
+                }
+            }
         }
 
-        if !found_set && prev_alt > 0.0 && alt < 0.0 && jd > jd_today {
-            set_jd = Some(jd + J2000);
-            found_set = true;
-        }
-
-        if found_rise && found_set {
-            break;
-        }
-
-        prev_alt = alt;
-        jd += step;
+        // advance the start point
+        y_minus = y_plus;
+        hour_offset += 2.0;
     }
 
-    (rise_jd, set_jd)
+    (jd_rise, jd_set)
 }

@@ -1,12 +1,15 @@
+use core::f64::consts::TAU;
+
 use fasttime::{Date, DateTime, Time, Weekday};
 use libm::floor;
 
-use crate::SECONDS_PER_DAY;
+use crate::{HOUR_PER_RAD, SECONDS_PER_DAY};
 
 pub const J2000: f64 = 2451545.0;
 pub const J1970: f64 = 2440588.0;
 pub const J1970_UNIX_EPOCH: f64 = J1970 - 0.5;
 pub const DAYS_PER_JULIAN_CENTURY: f64 = 36525.0;
+pub const DAY_PER_HOUR: f64 = 1.0 / 24.0;
 
 pub const D2000: Date = Date::from_ymd_unchecked(2000, 1, 1);
 pub const D1970: Date = Date::from_ymd_unchecked(1970, 1, 1);
@@ -39,16 +42,16 @@ pub trait AstronDatetimeExt: DateExt {
         self.to_julian() / DAYS_PER_JULIAN_CENTURY
     }
 
-    /// local sidereal time in degrees, assume the current datetime is in UT
+    /// local sidereal time in radians, assume the current datetime is in UT
     #[inline]
-    fn to_sidereal_time(&self, lon: f64) -> f64 {
-        let jd = self.to_julian_epoch_2000();
-        sidereal_time(jd, lon)
+    fn to_sidereal_time(&self, lon_rad: f64) -> f64 {
+        let jd = self.to_julian();
+        sidereal_time(jd, lon_rad)
     }
 
     /// local sidereal time in HMS, assume the current datetime is in UT
-    fn to_sidereal_time_hms(&self, lon: f64) -> (u8, u8, u8) {
-        let hr = self.to_sidereal_time(lon) / 15.0;
+    fn to_sidereal_time_hms(&self, lon_rad: f64) -> (u8, u8, u8) {
+        let hr = self.to_sidereal_time(lon_rad) * HOUR_PER_RAD;
         let h = floor(hr);
         let m_decimal = (hr - h) * 60.0;
         let m = floor(m_decimal);
@@ -271,12 +274,15 @@ pub fn delta_t_2000(y: f64) -> f64 {
     dt_sec / SECONDS_PER_DAY
 }
 
-/// local sidereal time in degrees, `jd2000` is the julian day epoch since J2000
-pub fn sidereal_time(jd2000: f64, lon: f64) -> f64 {
+/// local sidereal time in radians
+pub fn sidereal_time(jd: f64, lon_rad: f64) -> f64 {
+    let jd2000 = jd - J2000;
     let t = jd2000 / DAYS_PER_JULIAN_CENTURY;
+
     let gmst =
         280.46061837 + 360.98564736629 * jd2000 + 0.000387933 * t * t - (t * t * t) / 38710000.0;
+    let gmst_rad = gmst.to_radians();
 
-    let lst = (gmst + lon) % 360.0;
-    if lst < 0.0 { lst + 360.0 } else { lst }
+    let lst = (gmst_rad + lon_rad) % TAU;
+    if lst < 0.0 { lst + TAU } else { lst }
 }
