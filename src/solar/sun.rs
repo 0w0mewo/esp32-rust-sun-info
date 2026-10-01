@@ -63,14 +63,14 @@ impl PlanetUpdater for Sun {
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        let jd = now.utc.to_julian();
+        let jd_today_utc = now.utc.date.to_julian();
         let delta_t = now.utc.delta_t();
         let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
 
         let (rise, set) =
-            SolarObject::Sun.get_rise_set(jd, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
+            SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
         let (dawn, dusk) =
-            SolarObject::Sun.get_rise_set(jd, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
+            SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
         self.rise = rise;
         self.set = set;

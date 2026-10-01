@@ -67,18 +67,17 @@ impl SolarObject {
     /// derive from 'Astronomy on the Personal Computer, ch 3'
     pub fn get_rise_set(
         &self,
-        jd: f64,
-        delta_t: f64,
+        jd0: f64,
+        dt_days: f64,
         lat: f64,
         lon: f64,
-        refraction_rad: f64,
+        refracted_horizon_rad: f64,
     ) -> (Option<EventInfo>, Option<EventInfo>) {
         let lat_rad = lat.to_radians();
         let lon_rad = lon.to_radians();
-        let jd0 = floor(jd) + 0.5;
 
         // refraction
-        let refracted_sine_altitude = sin(refraction_rad);
+        let refracted_sine_horizon_altitude = sin(refracted_horizon_rad);
 
         let mut jd_rise = None;
         let mut jd_set = None;
@@ -88,7 +87,7 @@ impl SolarObject {
         // sine altitude of the object from given hour offset of JD0
         let sin_altitude = |hr: f64| {
             let jd = jd0 + hr * DAY_PER_HOUR;
-            let jde = jd - J2000 + delta_t;
+            let jde = jd - J2000 + dt_days;
             let (ra_rad, dec_rad) = match self {
                 SolarObject::Moon => {
                     let (ra, dec, _) = moon_coord(jde);
@@ -99,13 +98,13 @@ impl SolarObject {
 
             let hr_angle_rad = sidereal_time(jd, lon_rad) - ra_rad;
 
-            sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_altitude
+            sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
         // search for rise/set in 24 hours interval
         let mut hour_offset = 1.0;
         let mut y_minus = sin_altitude(0.0);
-        while hour_offset < 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
+        while hour_offset <= 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
             let y0 = sin_altitude(hour_offset);
             let y_plus = sin_altitude(hour_offset + 1.0);
 
@@ -144,7 +143,7 @@ impl SolarObject {
         }
 
         let to_event_info = |jd| {
-            let HorizontalCoordinate { azimuth, .. } = self.get_pos(jd, delta_t, lat, lon);
+            let HorizontalCoordinate { azimuth, .. } = self.get_pos(jd, dt_days, lat, lon);
 
             EventInfo { jd, azimuth }
         };
