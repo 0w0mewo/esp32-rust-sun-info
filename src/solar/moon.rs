@@ -3,13 +3,13 @@ use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
-    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, DateExt, J2000, delta_t_2000, sidereal_time},
-    sine_altitude,
-    solar::{PlanetUpdater, SolarObject, get_pos },
+    HorizontalCoordinate, SECONDS_PER_DAY,
+    datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
+    solar::{EventInfo, PlanetUpdater, SolarObject},
 };
 
 const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;
+const LUNAR_EDGE_REFRACTION_RAD: f64 = (8.0_f64 / 60.0).to_radians();
 
 #[derive(Default, Clone, Copy)]
 pub enum Phase {
@@ -66,20 +66,16 @@ pub struct Moon {
     new_moon: f64,
     /// local JD of upcoming full moon
     full_moon: f64,
-    /// moonrise in local JD
-    moonrise: Option<f64>,
-    /// moonset in JD
-    moonset: Option<f64>,
-    /// azimuth when rising
-    rise_azim: f64,
-    /// azimuth when setting
-    set_azim: f64,
+    /// moonrise event info
+    moonrise: Option<EventInfo>,
+    /// moonset event info
+    moonset: Option<EventInfo>,
     pos: HorizontalCoordinate,
 }
 
 impl PlanetUpdater for Moon {
     fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        self.pos = get_pos(&now.utc, lat, lon, SolarObject::Moon);
+        self.pos = SolarObject::Moon.get_pos(now.utc.to_julian(), now.utc.delta_t(), lat, lon);
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
@@ -104,35 +100,22 @@ impl PlanetUpdater for Moon {
         }
 
         // moonrise and moonset
-        // Note: use get_pos here instead of in moon_rise_set() to save some time on heavy compuation
         let delta_t = now_utc.delta_t();
-        let (rise_jd, set_jd) = moon_rise_set(jd_now_utc, delta_t, lat, lon);
-        self.moonrise = rise_jd.map(|rise_jd_utc| {
-            HorizontalCoordinate {
-                azimuth: self.rise_azim,
-                ..
-            } = get_pos(
-                &DateTime::from_julian(rise_jd_utc),
-                lat,
-                lon,
-                SolarObject::Moon,
-            );
+        let (rise, set) = SolarObject::Moon.get_rise_set(
+            jd_now_utc,
+            delta_t,
+            lat,
+            lon,
+            LUNAR_EDGE_REFRACTION_RAD,
+        );
+        self.moonrise = rise;
+        self.moonset = set;
 
-            rise_jd_utc + tz_offset_days
-        });
-        self.moonset = set_jd.map(|set_jd_utc| {
-            HorizontalCoordinate {
-                azimuth: self.set_azim,
-                ..
-            } = get_pos(
-                &DateTime::from_julian(set_jd_utc),
-                lat,
-                lon,
-                SolarObject::Moon,
-            );
-
-            set_jd_utc + tz_offset_days
-        });
+        // shift the rise/set time to local time
+        if let (Some(rise), Some(set)) = (self.moonrise.as_mut(), self.moonset.as_mut()) {
+            rise.jd += tz_offset_days;
+            set.jd += tz_offset_days;
+        }
 
         // other stuffs
         let (age, illumination) =
@@ -174,23 +157,31 @@ impl Moon {
     #[inline]
     /// moon rise in local time, None if no rise event
     pub fn rise_at(&self) -> Option<DateTime> {
-        self.moonrise.map(DateTime::from_julian)
+        self.moonrise
+            .as_ref()
+            .map(|ev_info| DateTime::from_julian(ev_info.jd))
     }
 
     #[inline]
     /// moon set in local time, None if no set event
     pub fn set_at(&self) -> Option<DateTime> {
-        self.moonset.map(DateTime::from_julian)
+        self.moonset
+            .as_ref()
+            .map(|ev_info| DateTime::from_julian(ev_info.jd))
     }
 
     #[inline]
     pub fn rise_azimuth(&self) -> f64 {
-        self.rise_azim
+        self.moonset
+            .as_ref()
+            .map_or(0.0, |event_info| event_info.azimuth)
     }
 
     #[inline]
     pub fn set_azimuth(&self) -> f64 {
-        self.set_azim
+        self.moonrise
+            .as_ref()
+            .map_or(0.0, |event_info| event_info.azimuth)
     }
 
     // lunar age and illumination
@@ -631,73 +622,4 @@ fn nutation_obliquity(t: f64) -> (f64, f64) {
     let eps = eps0 + deps;
 
     (dpsi, eps)
-}
-
-/// find upcoming moon rise and set JD by brute forcing the crossing point
-/// derive from 'Astronomy on the Personal Computer, ch 3'
-fn moon_rise_set(jd: f64, delta_t: f64, lat: f64, lon: f64) -> (Option<f64>, Option<f64>) {
-    let lat_rad = lat.to_radians();
-    let lon_rad = lon.to_radians();
-    let jd0 = floor(jd) + 0.5;
-    
-    // refraction for moon
-    let refracted_sine_altitude = sin((8.0_f64 / 60.0).to_radians());
-
-    let mut jd_rise = None;
-    let mut jd_set = None;
-
-    let mut quadratic = QuadraticInterpolator::default();
-
-    // moon sine altitude of given hour offset of JD0
-    let moon_sin_altitude = |hr: f64| {
-        let jd = jd0 + hr * DAY_PER_HOUR;
-
-        let (ra_rad, dec_rad,_) = moon_coord(jd - J2000 + delta_t);
-        let hr_angle_rad = sidereal_time(jd, lon_rad) - ra_rad;
-
-        sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_altitude
-    };
-
-    // search for rise/set in 24 hours interval
-    let mut hour_offset = 1.0;
-    let mut y_minus = moon_sin_altitude(0.0);
-    while hour_offset < 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
-        let y0 = moon_sin_altitude(hour_offset);
-        let y_plus = moon_sin_altitude(hour_offset + 1.0);
-
-        // searching altitude = 0 degree by searching y = 0 where y might between y_minus, y0 and y_plus
-        quadratic.fit(y_minus, y0, y_plus);
-        if let Some(roots) = quadratic.roots() {
-            match roots {
-                QuadraticRoots::One { root } => {
-                    let t = hour_offset + root;
-                    let t = t * DAY_PER_HOUR + jd0;
-                    if y_minus < 0.0 {
-                        jd_rise.replace(t);
-                    } else {
-                        jd_set.replace(t);
-                    }
-                }
-                QuadraticRoots::Two { root1, root2 } => {
-                    let t1 = hour_offset + root1;
-                    let t1 = t1 * DAY_PER_HOUR + jd0;
-                    let t2 = hour_offset + root2;
-                    let t2 = t2 * DAY_PER_HOUR + jd0;
-                    if quadratic.y_extremum() < 0.0 {
-                        jd_rise.replace(t2);
-                        jd_set.replace(t1);
-                    } else {
-                        jd_rise.replace(t1);
-                        jd_set.replace(t2);
-                    }
-                }
-            }
-        }
-
-        // advance the start point
-        y_minus = y_plus;
-        hour_offset += 2.0;
-    }
-
-    (jd_rise, jd_set)
 }

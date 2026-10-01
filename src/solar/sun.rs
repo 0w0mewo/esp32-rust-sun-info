@@ -1,13 +1,15 @@
-use core::f64::consts::TAU;
-use fasttime::{DateTime, OffsetDateTime, Time};
-use libm::{acos, asin, atan2, cos, floor, round, sin, sincos, tan};
+use fasttime::{OffsetDateTime, Time};
+use libm::{asin, atan2, cos, floor, sin, sincos};
 use smart_leds::{RGB, RGB8};
 
 use crate::{
     DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate, SECONDS_PER_DAY,
-    datetime::{DateExt, J2000, delta_t_2000},
-    solar::{PlanetUpdater, SolarObject, get_pos},
+    datetime::{AstronDatetimeExt, J2000, MIDNIGHT, delta_t_2000},
+    solar::{EventInfo, PlanetUpdater, SolarObject},
 };
+
+const TWILIGHT_REFRACTION_RAD: f64 = -6.0f64.to_radians();
+const SOLAR_EDGE_REFRACTION_RAD: f64 = (-50.0f64 / 60.0).to_radians();
 
 #[derive(Default, Clone, Copy)]
 pub enum DayProgress {
@@ -42,48 +44,52 @@ impl DayProgress {
 
 #[derive(Clone, Default)]
 pub struct Sun {
-    /// rise time, seconds since midnight
-    rise_at: u32,
-    /// set time, seconds since midnight
-    set_at: u32,
-    /// dawn time, seconds since midnight
-    dawn_at: u32,
-    /// dusk time, seconds since midnight
-    dusk_at: u32,
+    /// rise info
+    rise: Option<EventInfo>,
+    /// set info
+    set: Option<EventInfo>,
+    /// dawn info
+    dawn: Option<EventInfo>,
+    /// dusk info
+    dusk: Option<EventInfo>,
     /// current position
     pos: HorizontalCoordinate,
-    /// azimuth when rising
-    rise_azim: f64,
-    /// azimuth when setting
-    set_azim: f64,
     daytime_length: f64,
 }
 
 impl PlanetUpdater for Sun {
     fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        self.pos = get_pos(&now.utc, lat, lon, SolarObject::Sun);
+        self.pos = SolarObject::Sun.get_pos(now.utc.to_julian(), now.utc.delta_t(), lat, lon);
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        let (sunrise, sunset) = sunrise_sunset_utc_seconds(&now.utc, lat, lon);
-        let (dawn, dusk) = sundawn_sundusk_utc_seconds(&now.utc, lat, lon);
+        let jd = now.utc.to_julian();
+        let delta_t = now.utc.delta_t();
+        let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
 
-        // convert to seconds since midnight in local time
-        let (sunrise, sunset) = (
-            sunrise + now.offset.as_seconds() as f64,
-            sunset + now.offset.as_seconds() as f64,
-        );
-        let (dawn, dusk) = (
-            dawn + now.offset.as_seconds() as f64,
-            dusk + now.offset.as_seconds() as f64,
-        );
+        let (rise, set) =
+            SolarObject::Sun.get_rise_set(jd, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
+        let (dawn, dusk) =
+            SolarObject::Sun.get_rise_set(jd, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
-        self.rise_at = round(sunrise) as u32;
-        self.set_at = round(sunset) as u32;
-        self.dawn_at = round(dawn) as u32;
-        self.dusk_at = round(dusk) as u32;
-        self.daytime_length = sunset - sunrise;
-        (self.rise_azim, self.set_azim) = sunrise_sunset_azimuth(&now.utc, lat, lon);
+        self.rise = rise;
+        self.set = set;
+        self.dawn = dawn;
+        self.dusk = dusk;
+
+        // shift rise/set times to local time
+        if let (Some(rise), Some(set)) = (self.rise.as_mut(), self.set.as_mut()) {
+            rise.jd += tz_offset_days;
+            set.jd += tz_offset_days;
+
+            self.daytime_length = rise.jd - set.jd;
+        }
+
+        // shift dawn/dusk times to local time
+        if let (Some(dawn), Some(dusk)) = (self.dawn.as_mut(), self.dusk.as_mut()) {
+            dawn.jd += tz_offset_days;
+            dusk.jd += tz_offset_days;
+        }
     }
 }
 
@@ -91,35 +97,53 @@ impl Sun {
     /// sun rise at local time
     #[inline(always)]
     pub fn rise_at(&self) -> Time {
-        Time::from_seconds_nanos(self.rise_at, 0).unwrap()
+        self.rise
+            .as_ref()
+            .map(|event_info| event_info.time())
+            .unwrap_or(MIDNIGHT)
     }
 
     /// sun set at local time
     #[inline(always)]
     pub fn set_at(&self) -> Time {
-        Time::from_seconds_nanos(self.set_at, 0).unwrap()
+        self.set
+            .as_ref()
+            .map(|event_info| event_info.time())
+            .unwrap_or(MIDNIGHT)
     }
 
     /// sun dawn at local time
     #[inline]
     pub fn dawn_at(&self) -> Time {
-        Time::from_seconds_nanos(self.dawn_at, 0).unwrap()
+        self.dawn
+            .as_ref()
+            .map(|event_info| event_info.time())
+            .unwrap_or(MIDNIGHT)
     }
 
     /// sun dusk at local time
     #[inline]
     pub fn dusk_at(&self) -> Time {
-        Time::from_seconds_nanos(self.dusk_at, 0).unwrap()
+        self.dusk
+            .as_ref()
+            .map(|event_info| event_info.time())
+            .unwrap_or(MIDNIGHT)
     }
 
     #[inline]
     pub fn rise_azimuth(&self) -> f64 {
-        self.rise_azim
+        self.rise
+            .as_ref()
+            .map(|event_info| event_info.azimuth)
+            .unwrap_or_default()
     }
 
     #[inline]
     pub fn set_azimuth(&self) -> f64 {
-        self.set_azim
+        self.set
+            .as_ref()
+            .map(|event_info| event_info.azimuth)
+            .unwrap_or_default()
     }
 
     /// sun current azimuth and altitude are in degrees
@@ -131,16 +155,16 @@ impl Sun {
     /// daytime progress, `None` if it's after sunset
     pub fn day_progress(&self, now_local: &Time) -> DayProgress {
         let now = now_local.seconds_since_midnight();
+        let set = self.rise_at().seconds_since_midnight();
+        let rise = self.set_at().seconds_since_midnight();
 
         // invalid rise/set time or after sunset or before sunrise
-        if self.set_at < self.rise_at || self.set_at < now || self.rise_at > now {
+        if set < rise || set < now || rise > now {
             return DayProgress::Night;
         }
 
         // sunrise < now < sunset, so it should be safe to subtract two unsigned integers
-        DayProgress::Day(
-            (now.saturating_sub(self.rise_at) as f64 / self.daytime_length).clamp(0.0, 1.0),
-        )
+        DayProgress::Day((now.saturating_sub(rise) as f64 / self.daytime_length).clamp(0.0, 1.0))
     }
 
     pub fn color_at(&self, now: &Time) -> RGB8 {
@@ -162,89 +186,6 @@ impl Sun {
             RGB::new(0, 80, 255) // Moon color
         }
     }
-}
-
-/// UTC time of sunrise and sunset in seconds since midnight
-/// return in (`sunrise`, `sunset`)
-fn sunrise_sunset_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f64) {
-    let (ha, eqtime) = sun_ha_eqtime(now_utc, lat, 90.8333);
-
-    let sunrise = 720.0 - 4.0 * (lon + ha) - eqtime;
-    let sunset = 720.0 - 4.0 * (lon - ha) - eqtime;
-
-    (sunrise * 60.0, sunset * 60.0)
-}
-
-/// sunset and sunrise azimuth in degrees
-/// return in (`sunrise`, `sunset`)
-fn sunrise_sunset_azimuth(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f64) {
-    // UTC time in seconds since midnight
-    let (sunrise, sunset) = sunrise_sunset_utc_seconds(now_utc, lat, lon);
-
-    // sunrise and sunset in unix epoch
-    let unix_days_in_secs = now_utc.date.days_since_unix_epoch() as f64 * SECONDS_PER_DAY;
-    let sunrise_unix_utc = round(unix_days_in_secs + sunrise) as i64;
-    let sunset_unix_utc = round(unix_days_in_secs + sunset) as i64;
-
-    // convert to datetime so that it can be passed to `get_pos()`
-    let sunrise = DateTime::from_unix_timestamp(sunrise_unix_utc, 0).unwrap();
-    let sunset = DateTime::from_unix_timestamp(sunset_unix_utc, 0).unwrap();
-
-    let HorizontalCoordinate {
-        azimuth: rise_azim, ..
-    } = get_pos(&sunrise, lat, lon, SolarObject::Sun);
-    let HorizontalCoordinate {
-        azimuth: set_azim, ..
-    } = get_pos(&sunset, lat, lon, SolarObject::Sun);
-
-    (rise_azim, set_azim)
-}
-
-// UTC time of dawn and dusk in minutes since midnight
-/// return in (`dawn`, `dusk`)
-fn sundawn_sundusk_utc_seconds(now_utc: &DateTime, lat: f64, lon: f64) -> (f64, f64) {
-    let (ha, eqtime) = sun_ha_eqtime(now_utc, lat, 96.0);
-
-    let dawn = 720.0 - 4.0 * (lon + ha) - eqtime;
-    let dusk = 720.0 - 4.0 * (lon - ha) - eqtime;
-
-    (dawn * 60.0, dusk * 60.0)
-}
-
-/// derived from https://gml.noaa.gov/grad/solcalc/solareqns.PDF
-fn sun_ha_eqtime(now_utc: &DateTime, lat: f64, zenith_angle: f64) -> (f64, f64) {
-    // fractional year in radians
-    let frac_year = {
-        let day_of_year = now_utc.date.ordinal() as f64;
-        let days_per_year = now_utc.days_per_year() as f64;
-        let frac_day = now_utc.time.seconds_since_midnight() as f64 / SECONDS_PER_DAY;
-
-        TAU * (day_of_year - 1.5 + frac_day) / days_per_year
-    };
-    let (frac_year_sin, frac_year_cos) = sincos(frac_year);
-    let (double_frac_year_sin, double_frac_year_cos) = sincos(2.0 * frac_year);
-    let (triple_frac_year_sin, triple_frac_year_cos) = sincos(3.0 * frac_year);
-
-    // equation of time in minutes
-    let eqtime = 229.18
-        * (0.000075 + 0.001868 * frac_year_cos
-            - 0.032077 * frac_year_sin
-            - 0.014615 * double_frac_year_cos
-            - 0.040849 * double_frac_year_sin);
-
-    // solar declination angle in radians
-    let dec = 0.006918 - 0.399912 * frac_year_cos + 0.070257 * frac_year_sin
-        - 0.006758 * double_frac_year_cos
-        + 0.000907 * double_frac_year_sin
-        - 0.002697 * triple_frac_year_cos
-        + 0.00148 * triple_frac_year_sin;
-
-    let lat_rad = lat.to_radians();
-    let zenith_angle_rad = zenith_angle.to_radians();
-    let ha_cos = cos(zenith_angle_rad) / (cos(lat_rad) * cos(dec)) - tan(lat_rad) * tan(dec);
-    let ha = acos(ha_cos).to_degrees(); // hour angle
-
-    (ha, eqtime)
 }
 
 /// Sun's apparent equatorial coordinates, Meeus ch. 25. d = days since J2000 (TT);

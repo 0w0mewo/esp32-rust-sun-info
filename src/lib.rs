@@ -22,7 +22,7 @@ use crate::datetime::DAYS_PER_JULIAN_CENTURY;
 
 pub const MICROSECS_PER_SEC: u64 = 1_000_000;
 const SECONDS_PER_DAY: f64 = 24.0 * 3600.0;
-pub const HOUR_PER_RAD: f64 = (1.0_f64/15.0).to_radians();
+pub const HOUR_PER_RAD: f64 = (1.0_f64 / 15.0).to_radians();
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
