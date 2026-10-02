@@ -107,7 +107,7 @@ impl SolarObject {
         };
 
         // search for rise/set in -12 hours to 24 hours interval (36 hours total)
-        let mut hour_offset = -12.0;
+        let mut hour_offset = -11.0;
         let mut y_minus = sin_altitude(hour_offset - 1.0);
         while hour_offset <= 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
             let y0 = sin_altitude(hour_offset);
@@ -119,7 +119,7 @@ impl SolarObject {
                 match roots {
                     QuadraticRoots::One { root } => {
                         let t = hour_offset + root;
-                        let t = t * DAY_PER_HOUR + jd0;
+                        let t = t * DAY_PER_HOUR + jd0; // decimal hour to JD
                         if y_minus < 0.0 {
                             jd_rise.replace(t);
                         } else {
@@ -128,8 +128,8 @@ impl SolarObject {
                     }
                     QuadraticRoots::Two { root1, root2 } => {
                         let t1 = hour_offset + root1;
-                        let t1 = t1 * DAY_PER_HOUR + jd0;
                         let t2 = hour_offset + root2;
+                        let t1 = t1 * DAY_PER_HOUR + jd0; // decimal hour to JD
                         let t2 = t2 * DAY_PER_HOUR + jd0;
                         if quadratic.y_extremum() < 0.0 {
                             jd_rise.replace(t2);
@@ -143,8 +143,8 @@ impl SolarObject {
             }
 
             // advance the start point
-            y_minus = y_plus;
-            hour_offset += 2.0;
+            y_minus = y_plus; // the last is the first on the next round
+            hour_offset += 2.0; // searching window size is 3
         }
 
         let to_event_info = |jd| {
