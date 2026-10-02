@@ -106,9 +106,9 @@ impl SolarObject {
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
-        // search for rise/set in 24 hours interval
-        let mut hour_offset = 1.0;
-        let mut y_minus = sin_altitude(0.0);
+        // search for rise/set in -12 hours to 24 hours interval (36 hours total)
+        let mut hour_offset = -12.0;
+        let mut y_minus = sin_altitude(hour_offset - 1.0);
         while hour_offset <= 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
             let y0 = sin_altitude(hour_offset);
             let y_plus = sin_altitude(hour_offset + 1.0);
