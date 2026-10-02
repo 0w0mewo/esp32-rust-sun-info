@@ -28,10 +28,15 @@ pub struct EventInfo {
 impl EventInfo {
     /// time of the event
     pub fn time(&self) -> Time {
-        let day_frac = self.jd - floor(self.jd) + 0.5; // fraction of a day, 0.0 is midnight
-        let secs_since_midnight = fmod(day_frac * SECONDS_PER_DAY, SECONDS_PER_DAY);
+        let secs_since_midnight = self.seconds_since_midnight();
 
         Time::from_seconds_nanos(round(secs_since_midnight) as u32, 0).unwrap_or(MIDNIGHT)
+    }
+
+    /// seconds since midnight
+    pub fn seconds_since_midnight(&self) -> f64 {
+        let day_frac = self.jd - floor(self.jd) + 0.5; // fraction of a day, 0.0 is midnight
+        fmod(day_frac * SECONDS_PER_DAY, SECONDS_PER_DAY)
     }
 }
 

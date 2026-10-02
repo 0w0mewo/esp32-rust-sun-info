@@ -54,6 +54,7 @@ pub struct Sun {
     dusk: Option<EventInfo>,
     /// current position
     pos: HorizontalCoordinate,
+    /// day length in seconds
     daytime_length: f64,
 }
 
@@ -67,8 +68,13 @@ impl PlanetUpdater for Sun {
         let delta_t = now.utc.delta_t();
         let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
 
-        let (rise, set) =
-            SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
+        let (rise, set) = SolarObject::Sun.get_rise_set(
+            jd_today_utc,
+            delta_t,
+            lat,
+            lon,
+            SOLAR_EDGE_REFRACTION_RAD,
+        );
         let (dawn, dusk) =
             SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
@@ -82,7 +88,7 @@ impl PlanetUpdater for Sun {
             rise.jd += tz_offset_days;
             set.jd += tz_offset_days;
 
-            self.daytime_length = rise.jd - set.jd;
+            self.daytime_length = (set.jd - rise.jd).abs() * SECONDS_PER_DAY;
         }
 
         // shift dawn/dusk times to local time
@@ -154,9 +160,17 @@ impl Sun {
 
     /// daytime progress, `None` if it's after sunset
     pub fn day_progress(&self, now_local: &Time) -> DayProgress {
-        let now = now_local.seconds_since_midnight();
-        let set = self.rise_at().seconds_since_midnight();
-        let rise = self.set_at().seconds_since_midnight();
+        let now = now_local.seconds_since_midnight() as f64;
+        let rise = self
+            .rise
+            .as_ref()
+            .map(|ev| ev.seconds_since_midnight())
+            .unwrap_or_default();
+        let set = self
+            .set
+            .as_ref()
+            .map(|ev| ev.seconds_since_midnight())
+            .unwrap_or_default();
 
         // invalid rise/set time or after sunset or before sunrise
         if set < rise || set < now || rise > now {
@@ -164,7 +178,8 @@ impl Sun {
         }
 
         // sunrise < now < sunset, so it should be safe to subtract two unsigned integers
-        DayProgress::Day((now.saturating_sub(rise) as f64 / self.daytime_length).clamp(0.0, 1.0))
+        let day_prog = (now - rise) / self.daytime_length;
+        DayProgress::Day(day_prog.clamp(0.0, 1.0))
     }
 
     pub fn color_at(&self, now: &Time) -> RGB8 {
