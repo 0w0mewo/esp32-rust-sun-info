@@ -7,12 +7,13 @@ use fasttime::{Date, DateTime, OffsetDateTime, Time};
 use ssd1306::{Ssd1306Async, prelude::*};
 
 use crate::board::I2cBusDeviceAsync;
+use crate::datetime::{AstronDatetimeExt, UNIX_EPOCH, UtOffsetExt};
 use crate::events::NtpStatus;
-use crate::solar::SolarObject;
 use crate::solar::moon::{self, Moon};
 use crate::solar::sun::{
     self, NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, Sun,
 };
+use crate::solar::{PlanetUpdater, SolarObject};
 use crate::ui::views::View;
 use crate::{AppError, HorizontalCoordinate, SECONDS_PER_DAY, SSD1306};
 
@@ -156,18 +157,12 @@ pub enum UpdateCmd {
         sundawn_at: Time,
         sundusk_at: Time,
     },
-    SetSunRiseSet {
-        rise_at: Time,
-        set_at: Time,
-    },
-    SetMoonRiseSet {
+    SetRiseSet {
         rise_at: Option<DateTime>,
         set_at: Option<DateTime>,
-    },
-    SetRiseSetDirection {
-        obj: SolarObject,
         rise_azim: f64,
         set_azim: f64,
+        obj: SolarObject,
     },
     SetPosition {
         obj: SolarObject,
@@ -198,75 +193,84 @@ impl UpdateCmd {
         UpdateCmd::SetApStatus(connected_ap.into()).notify().await
     }
 
-    pub async fn notifiy_new_lunar_state(moon: &Moon) {
+    pub async fn notifiy_new_lunar_state(datetime: &OffsetDateTime, moon: &Moon) {
+        let next_new_moon_utc = moon.upcoming_new_moon();
+        let next_full_moon_utc = moon.upcoming_full_moon();
+
+        // apply timezone standard offset and DST
+        let tz_offset = Some(&datetime.offset);
+        let next_new_moon = next_new_moon_utc.add_ut_offset(tz_offset).date;
+        let next_full_moon = next_full_moon_utc.add_ut_offset(tz_offset).date;
+
         // update moon info view
         (UpdateCmd::SetLunar {
             lunar_phase: moon.phase(),
             lunar_illumination: moon.illumination(),
-            next_new_moon: moon.upcoming_new_moon().date,
-            next_full_moon: moon.upcoming_full_moon().date,
-        })
-        .notify()
-        .await;
-
-        (UpdateCmd::SetMoonRiseSet {
-            rise_at: moon.rise_at(),
-            set_at: moon.set_at(),
-        })
-        .notify()
-        .await;
-        (UpdateCmd::SetRiseSetDirection {
-            obj: SolarObject::Moon,
-            rise_azim: moon.rise_azimuth(),
-            set_azim: moon.set_azimuth(),
-        })
-        .notify()
-        .await;
-
-        (UpdateCmd::SetPosition {
-            obj: SolarObject::Moon,
-            pos: moon.pos(),
+            next_new_moon,
+            next_full_moon,
         })
         .notify()
         .await;
     }
 
     /// push new datetime, sun and moon state to UI
-    pub async fn notify_new_solar_state(datetime: DateTime, sun: &Sun) {
+    pub async fn notify_new_solar_state(datetime: &OffsetDateTime, sun: &Sun) {
+        // in UTC
+        let sundusk_at = sun.dusk_at().unwrap_or(UNIX_EPOCH);
+        let sundawn_at = sun.dawn_at().unwrap_or(UNIX_EPOCH);
+
+        // apply timezone standard offset and DST
+        let tz_offset = Some(&datetime.offset);
+        let sundusk_at = sundusk_at.add_ut_offset(tz_offset).time;
+        let sundawn_at = sundawn_at.add_ut_offset(tz_offset).time;
+
         // update sun info view
         (UpdateCmd::SetSolar {
-            day_progress: sun.day_progress(&datetime.time),
-            sundusk_at: sun.dusk_at(),
-            sundawn_at: sun.dawn_at(),
+            day_progress: sun.day_progress(&datetime.utc.time),
+            sundusk_at,
+            sundawn_at,
         })
         .notify()
         .await;
+    }
 
-        (UpdateCmd::SetRiseSetDirection {
-            obj: SolarObject::Sun,
-            rise_azim: sun.rise_azimuth(),
-            set_azim: sun.set_azimuth(),
-        })
-        .notify()
-        .await;
-        (UpdateCmd::SetSunRiseSet {
-            rise_at: sun.rise_at(),
-            set_at: sun.set_at(),
+    /// push new rise/set event infos and current position of a planet/sun/moon
+    pub async fn notify_new_object_state<PLANET: PlanetUpdater>(
+        datetime: &OffsetDateTime,
+        planet: &PLANET,
+    ) {
+        // convert rise/set to local time
+        let tz_offset = Some(&datetime.offset);
+        let rise_at = planet
+            .rise_at()
+            .map(|jd| DateTime::from_julian(jd).add_ut_offset(tz_offset));
+        let set_at = planet
+            .set_at()
+            .map(|jd| DateTime::from_julian(jd).add_ut_offset(tz_offset));
+
+        // update rise set
+        (UpdateCmd::SetRiseSet {
+            rise_at,
+            set_at,
+            rise_azim: planet.rise_azimuth(),
+            set_azim: planet.set_azimuth(),
+            obj: planet.planet(),
         })
         .notify()
         .await;
 
         // update position view
         (UpdateCmd::SetPosition {
-            obj: SolarObject::Sun,
-            pos: sun.pos(),
+            pos: planet.pos(),
+            obj: planet.planet(),
         })
         .notify()
         .await;
     }
 
-    /// push new datetime, LST, last NTP status to UI
-    pub async fn notify_new_datetime(datetime: OffsetDateTime, last_ntp_status: NtpStatus) {
+    /// push new local datetime, last NTP status to UI
+    pub async fn notify_new_datetime(datetime: &OffsetDateTime, last_ntp_status: NtpStatus) {
+        let datetime = datetime.add_ut_offset(None);
         (UpdateCmd::SetDatetime {
             datetime,
             last_ntp_status,
@@ -279,7 +283,7 @@ impl UpdateCmd {
         let year = datetime.utc.date.year as f64;
         let tz_days_offset = datetime.offset.as_seconds() as f64 / SECONDS_PER_DAY;
 
-        // seasons starting in local datetime
+        // seasons starting in local datetime without DST encounted
         let local_seasons = if lat >= 0.0 {
             NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT
         } else {

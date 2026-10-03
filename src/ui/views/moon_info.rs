@@ -32,17 +32,16 @@ impl UpdateableFromCmd for State {
                 last_ntp_status,
             } => self.datetime.update(datetime, last_ntp_status),
 
-            UpdateCmd::SetMoonRiseSet { rise_at, set_at } => {
-                self.moonrise = rise_at;
-                self.moonset = set_at;
-            }
-
-            UpdateCmd::SetRiseSetDirection {
-                obj,
+            UpdateCmd::SetRiseSet {
+                rise_at,
+                set_at,
                 rise_azim,
                 set_azim,
+                obj,
             } => {
                 if let SolarObject::Moon = obj {
+                    self.moonrise = rise_at;
+                    self.moonset = set_at;
                     self.moonrise_azimuth = rise_azim;
                     self.moonset_azimuth = set_azim;
                 }

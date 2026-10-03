@@ -1,4 +1,4 @@
-use crate::datetime::AstronDatetimeExt;
+use crate::datetime::{AstronDatetimeExt, UtOffsetExt};
 use crate::ui::views::TextBasedView;
 use crate::ui::{
     UpdateCmd,
@@ -46,6 +46,21 @@ impl core::fmt::Display for State {
         let summer = DateTime::from_julian(self.summer_jd);
         let autumn = DateTime::from_julian(self.autumn_jd);
         let winter = DateTime::from_julian(self.winter_jd);
+
+        // apply extra DST offset if any
+        let spring = spring
+            .add_duration(fasttime::Duration::seconds(spring.dst_offset_seconds()))
+            .unwrap();
+        let summer = summer
+            .add_duration(fasttime::Duration::seconds(summer.dst_offset_seconds()))
+            .unwrap();
+        let autumn = autumn
+            .add_duration(fasttime::Duration::seconds(autumn.dst_offset_seconds()))
+            .unwrap();
+        let winter = winter
+            .add_duration(fasttime::Duration::seconds(winter.dst_offset_seconds()))
+            .unwrap();
+
         write!(
             f,
             r#"{}

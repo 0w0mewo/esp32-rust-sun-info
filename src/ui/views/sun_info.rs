@@ -1,4 +1,4 @@
-use crate::datetime::MIDNIGHT;
+use crate::datetime::{MIDNIGHT, UNIX_EPOCH};
 use crate::solar::SolarObject;
 use crate::ui::components::DEG_SYM;
 use crate::ui::views::TextBasedView;
@@ -30,17 +30,16 @@ impl UpdateableFromCmd for State {
                 last_ntp_status,
             } => self.datetime.update(datetime, last_ntp_status),
 
-            UpdateCmd::SetSunRiseSet { rise_at, set_at } => {
-                self.sunrise_at = rise_at;
-                self.sunset_at = set_at;
-            }
-
-            UpdateCmd::SetRiseSetDirection {
-                obj,
+            UpdateCmd::SetRiseSet {
+                rise_at,
+                set_at,
                 rise_azim,
                 set_azim,
+                obj,
             } => {
                 if let SolarObject::Sun = obj {
+                    self.sunrise_at = rise_at.unwrap_or(UNIX_EPOCH).time;
+                    self.sunset_at = set_at.unwrap_or(UNIX_EPOCH).time;
                     self.sunrise_azim = rise_azim;
                     self.sunset_azim = set_azim;
                 }

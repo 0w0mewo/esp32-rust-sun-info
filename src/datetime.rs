@@ -1,9 +1,12 @@
 use core::f64::consts::TAU;
 
-use fasttime::{Date, DateTime, Time, Weekday};
+use fasttime::{Date, DateTime, OffsetDateTime, Time, UtcOffset};
 use libm::floor;
 
-use crate::{HOUR_PER_RAD, SECONDS_PER_DAY};
+use crate::{
+    HOUR_PER_RAD, SECONDS_PER_DAY,
+    config::{TZ_DST_END, TZ_DST_START},
+};
 
 pub const J2000: f64 = 2451545.0;
 pub const J1970: f64 = 2440588.0;
@@ -95,33 +98,6 @@ pub trait DateExt {
     /// decimal year by today with `offset` days
     fn decimal_year_with_offset_days(&self, offset: f64) -> f64;
 
-    /// the day of n-th weekday of the current month, return `None` if it's outside this month
-    fn nth_weekday(&self, weekday: Weekday, n: u8) -> Option<u8>;
-
-    /// the day of first occurence weekday of the current month
-    fn first_weekday(&self, weekday: Weekday) -> u8 {
-        self.nth_weekday(weekday, 1).unwrap()
-    }
-
-    /// the day of the last occurence weekday of the current month
-    fn last_weekday(&self, weekday: Weekday) -> u8;
-
-    /// the date of n-th weekday of the current month, return `None` if it's outside this month
-    fn nth_weekday_date(&self, weekday: Weekday, n: u8) -> Option<Date> {
-        self.nth_weekday(weekday, n)
-            .map(|d| Date::from_ymd_unchecked(self.year(), self.month(), d))
-    }
-
-    /// the date of first occurence weekday of the current month
-    fn first_weekday_date(&self, weekday: Weekday) -> Date {
-        Date::from_ymd_unchecked(self.year(), self.month(), self.first_weekday(weekday))
-    }
-
-    /// the date of the last occurence weekday of the current month
-    fn last_weekday_date(&self, weekday: Weekday) -> Date {
-        Date::from_ymd_unchecked(self.year(), self.month(), self.last_weekday(weekday))
-    }
-
     /// how many days in the current year, 366 days if it's leap year, 365 days otherwise
     fn days_per_year(&self) -> u16 {
         if self.is_leap_year() { 366 } else { 365 }
@@ -165,14 +141,6 @@ impl DateExt for DateTime {
         self.date.decimal_year_with_offset_days(offset)
     }
 
-    fn nth_weekday(&self, weekday: Weekday, n: u8) -> Option<u8> {
-        self.date.nth_weekday(weekday, n)
-    }
-
-    fn last_weekday(&self, weekday: Weekday) -> u8 {
-        self.date.last_weekday(weekday)
-    }
-
     #[inline]
     fn year(&self) -> i32 {
         self.date.year()
@@ -198,35 +166,6 @@ impl DateExt for Date {
         (self.ordinal() as f64 + offset) / self.days_per_year() as f64 + self.year as f64
     }
 
-    /// derived from https://rosettacode.org/wiki/Nth_Particular_Weekday_of_the_Month
-    fn nth_weekday(&self, weekday: Weekday, n: u8) -> Option<u8> {
-        let first_weekday = Date::from_ymd_unchecked(self.year, self.month, 1)
-            .weekday()
-            .number_from_monday() as i8;
-        let weekday = weekday.number_from_monday() as i8;
-
-        // 1 + first occurence + n-th occurence
-        // let target_day = 1 + (weekday - first_weekday) + (n as i8 - 1) * 7;
-        let target_day =
-            1 + (weekday - first_weekday) % 7 + 7 * (n as i8 - (first_weekday <= weekday) as i8);
-        if target_day as u8 > self.days_per_month() {
-            None
-        } else {
-            Some(target_day as u8)
-        }
-    }
-
-    fn last_weekday(&self, weekday: Weekday) -> u8 {
-        let last_date = Date::from_ymd_unchecked(self.year, self.month, self.days_per_month());
-        let last_weekday = last_date.weekday().number_from_monday() as i8;
-        let weekday = weekday.number_from_monday() as i8;
-
-        let days_diff = (weekday - last_weekday) % 7;
-        let days_back = if days_diff < 0 { days_diff } else { 7 } - days_diff;
-
-        (last_date.day as i8 - days_back) as u8
-    }
-
     #[inline]
     fn year(&self) -> i32 {
         self.year
@@ -244,6 +183,49 @@ impl DateExt for Date {
 
     fn default() -> Self {
         D1970
+    }
+}
+
+pub trait UtOffsetExt {
+    /// if the current datetime inside DST range
+    fn is_dst(&self) -> bool;
+    /// new datetime with standard timezone offset and DST offset
+    fn add_ut_offset(&self, tz_std_offset: Option<&UtcOffset>) -> Self;
+    /// add 3600 seconds if the current datetime is inside DST range, 0 if not
+    fn dst_offset_seconds(&self) -> i64 {
+        if self.is_dst() { 3600 } else { 0 }
+    }
+}
+
+impl UtOffsetExt for OffsetDateTime {
+    fn is_dst(&self) -> bool {
+        self.utc.is_dst()
+    }
+
+    fn add_ut_offset(&self, _tz_std_offset: Option<&UtcOffset>) -> Self {
+        let dst_offset = if self.is_dst() { 3600 } else { 0 };
+
+        self.add_duration(fasttime::Duration::seconds(dst_offset))
+            .unwrap()
+    }
+}
+
+impl UtOffsetExt for DateTime {
+    fn is_dst(&self) -> bool {
+        let unix_sec = self.unix_timestamp();
+
+        match (TZ_DST_START, TZ_DST_END) {
+            (Some(dst_start), Some(dst_end)) => !(dst_end..=dst_start).contains(&unix_sec),
+            _ => false,
+        }
+    }
+
+    fn add_ut_offset(&self, tz_std_offset: Option<&UtcOffset>) -> Self {
+        let tz_std_offset = tz_std_offset.map_or(0, |o| o.as_seconds()) as i64;
+        self.add_duration(fasttime::Duration::seconds(
+            tz_std_offset + self.dst_offset_seconds(),
+        ))
+        .unwrap()
     }
 }
 

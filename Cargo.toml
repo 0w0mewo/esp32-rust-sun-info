@@ -77,10 +77,9 @@ smart-leds = "0.4"
 esp-hal-smartled = { version = "0.18", features = ["esp32"] }
 
 [build-dependencies]
-chrono = { version = "0.4" }
-chrono-tz = { version = "0.10", features = ["case-insensitive"] }
+tz-rs = { version = "0.7" }
 tzf-rs = { git =  "https://github.com/ringsaturn/tzf-rs", rev = "v1.3.7", features = ["full"], default-features = false }
-
+time = { version = "0.3" }
 # For fine tuning these settings, please refer to https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.dev]
 # The default debug profile is too slow and too big for resource-constrained devices.

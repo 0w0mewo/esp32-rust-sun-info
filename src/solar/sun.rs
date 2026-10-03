@@ -1,10 +1,10 @@
-use fasttime::{OffsetDateTime, Time};
+use fasttime::{DateTime, Time};
 use libm::{asin, atan2, cos, floor, sin, sincos};
 use smart_leds::{RGB, RGB8};
 
 use crate::{
     DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, J2000, MIDNIGHT, delta_t_2000},
+    datetime::{AstronDatetimeExt, J2000, delta_t_2000},
     solar::{EventInfo, PlanetUpdater, SolarObject},
 };
 
@@ -59,14 +59,13 @@ pub struct Sun {
 }
 
 impl PlanetUpdater for Sun {
-    fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        self.pos = SolarObject::Sun.get_pos(now.utc.to_julian(), now.utc.delta_t(), lat, lon);
+    fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
+        self.pos = SolarObject::Sun.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
     }
 
-    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        let jd_today_utc = now.utc.date.to_julian();
-        let delta_t = now.utc.delta_t();
-        let tz_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
+    fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
+        let jd_today_utc = utc_now.date.to_julian();
+        let delta_t = utc_now.delta_t();
 
         let (rise, set) = SolarObject::Sun.get_rise_set(
             jd_today_utc,
@@ -78,89 +77,74 @@ impl PlanetUpdater for Sun {
         let (dawn, dusk) =
             SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
+        // daytime length in seconds
+        if let (Some(rise), Some(set)) = (rise.as_ref(), set.as_ref()) {
+            self.daytime_length = (set.jd - rise.jd).abs() * SECONDS_PER_DAY;
+        }
+
         self.rise = rise;
         self.set = set;
         self.dawn = dawn;
         self.dusk = dusk;
+    }
 
-        // shift rise/set times to local time
-        if let (Some(rise), Some(set)) = (self.rise.as_mut(), self.set.as_mut()) {
-            rise.jd += tz_offset_days;
-            set.jd += tz_offset_days;
+    #[inline]
+    fn rise_azimuth(&self) -> f64 {
+        self.rise
+            .as_ref()
+            .map(|event_info| event_info.azimuth)
+            .unwrap_or_default()
+    }
 
-            self.daytime_length = (set.jd - rise.jd).abs() * SECONDS_PER_DAY;
-        }
+    #[inline]
+    fn set_azimuth(&self) -> f64 {
+        self.set
+            .as_ref()
+            .map(|event_info| event_info.azimuth)
+            .unwrap_or_default()
+    }
 
-        // shift dawn/dusk times to local time
-        if let (Some(dawn), Some(dusk)) = (self.dawn.as_mut(), self.dusk.as_mut()) {
-            dawn.jd += tz_offset_days;
-            dusk.jd += tz_offset_days;
-        }
+    #[inline(always)]
+    fn set_at(&self) -> Option<f64> {
+        self.set.as_ref().map(|ev_info| ev_info.jd)
+    }
+
+    #[inline]
+    fn rise_at(&self) -> Option<f64> {
+        self.rise.as_ref().map(|ev_info| ev_info.jd)
+    }
+
+    #[inline]
+    fn pos(&self) -> HorizontalCoordinate {
+        self.pos
+    }
+
+    #[inline]
+    fn planet(&self) -> SolarObject {
+        SolarObject::Sun
     }
 }
 
 impl Sun {
-    /// sun rise at local time
-    #[inline(always)]
-    pub fn rise_at(&self) -> Time {
-        self.rise
-            .as_ref()
-            .map(|event_info| event_info.time())
-            .unwrap_or(MIDNIGHT)
-    }
-
-    /// sun set at local time
-    #[inline(always)]
-    pub fn set_at(&self) -> Time {
-        self.set
-            .as_ref()
-            .map(|event_info| event_info.time())
-            .unwrap_or(MIDNIGHT)
-    }
-
-    /// sun dawn at local time
+    /// sun dawn at UTC
     #[inline]
-    pub fn dawn_at(&self) -> Time {
+    pub fn dawn_at(&self) -> Option<DateTime> {
         self.dawn
             .as_ref()
-            .map(|event_info| event_info.time())
-            .unwrap_or(MIDNIGHT)
+            .map(|event_info| DateTime::from_julian(event_info.jd))
     }
 
-    /// sun dusk at local time
+    /// sun dusk at UTC
     #[inline]
-    pub fn dusk_at(&self) -> Time {
+    pub fn dusk_at(&self) -> Option<DateTime> {
         self.dusk
             .as_ref()
-            .map(|event_info| event_info.time())
-            .unwrap_or(MIDNIGHT)
-    }
-
-    #[inline]
-    pub fn rise_azimuth(&self) -> f64 {
-        self.rise
-            .as_ref()
-            .map(|event_info| event_info.azimuth)
-            .unwrap_or_default()
-    }
-
-    #[inline]
-    pub fn set_azimuth(&self) -> f64 {
-        self.set
-            .as_ref()
-            .map(|event_info| event_info.azimuth)
-            .unwrap_or_default()
-    }
-
-    /// sun current azimuth and altitude are in degrees
-    #[inline]
-    pub fn pos(&self) -> HorizontalCoordinate {
-        self.pos
+            .map(|event_info| DateTime::from_julian(event_info.jd))
     }
 
     /// daytime progress, `None` if it's after sunset
-    pub fn day_progress(&self, now_local: &Time) -> DayProgress {
-        let now = now_local.seconds_since_midnight() as f64;
+    pub fn day_progress(&self, utc_now: &Time) -> DayProgress {
+        let now = utc_now.seconds_since_midnight() as f64;
         let rise = self
             .rise
             .as_ref()

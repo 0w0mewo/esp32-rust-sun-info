@@ -64,9 +64,10 @@ async fn main(spawner: Spawner) -> ! {
         system::software_reset();
     });
 
-    // sunrise calc
-    let tz_offset =
-        UtcOffset::from_hours_minutes(TZ_SIGN_POSTIVE, TZ_OFFSET_HOURS, TZ_OFFSET_MINUTES).unwrap();
+    // time zone offset without DST
+    let tz_offset_std = UtcOffset::from_seconds(TZ_OFFSET_SECS).unwrap();
+
+    // sun and moon calc
     let mut sun = Sun::default();
     let mut moon = Moon::default();
     let (lat, lon) = (LAT, LON);
@@ -86,7 +87,7 @@ async fn main(spawner: Spawner) -> ! {
             rtc_now.div_euclid(MICROSECS_PER_SEC) as i64,
             rtc_now.rem_euclid(MICROSECS_PER_SEC) as i32,
         ) {
-            let now = OffsetDateTime::from_utc(utc_now, tz_offset);
+            let now = OffsetDateTime::from_utc(utc_now, tz_offset_std);
             let now_local = now.to_local().unwrap();
 
             if let Some(new_ntp_status) = NtpStatus::last() {
@@ -97,8 +98,8 @@ async fn main(spawner: Spawner) -> ! {
                 && first_run
             {
                 // make sure the moon and sun are updated at the first NTP synced
-                sun.update_astron(&now, lat, lon);
-                moon.update_astron(&now, lat, lon);
+                sun.update_astron(&utc_now, lat, lon);
+                moon.update_astron(&utc_now, lat, lon);
 
                 // update seasons start time
                 ui::UpdateCmd::update_season_start(&now, lat).await;
@@ -115,22 +116,26 @@ async fn main(spawner: Spawner) -> ! {
             {
                 // infrequently update sun and moon atronomical events
                 embassy_futures::select::Either::First(_) => {
-                    sun.update_astron(&now, lat, lon);
-                    moon.update_astron(&now, lat, lon);
+                    sun.update_astron(&utc_now, lat, lon);
+                    moon.update_astron(&utc_now, lat, lon);
                 }
                 // frequently update sun and moon position
                 embassy_futures::select::Either::Second(_) => {
-                    sun.update_pos(&now, lat, lon);
-                    moon.update_pos(&now, lat, lon);
+                    sun.update_pos(&utc_now, lat, lon);
+                    moon.update_pos(&utc_now, lat, lon);
                 }
             }
 
             // update datetime status bar
-            ui::UpdateCmd::notify_new_datetime(now, last_ntp_status).await;
+            ui::UpdateCmd::notify_new_datetime(&now, last_ntp_status).await;
+
+            // update rise/set and current position
+            ui::UpdateCmd::notify_new_object_state(&now, &sun).await;
+            ui::UpdateCmd::notify_new_object_state(&now, &moon).await;
 
             // update sun and moon states
-            ui::UpdateCmd::notify_new_solar_state(now_local, &sun).await;
-            ui::UpdateCmd::notifiy_new_lunar_state(&moon).await;
+            ui::UpdateCmd::notify_new_solar_state(&now, &sun).await;
+            ui::UpdateCmd::notifiy_new_lunar_state(&now, &moon).await;
 
             // flush display
             ui::UpdateCmd::redraw().await;

@@ -46,7 +46,7 @@ impl UpdateableFromCmd for State {
                 SolarObject::Sun => self.sun_pos = pos,
             },
 
-            UpdateCmd::SetRiseSetDirection {
+            UpdateCmd::SetRiseSet {
                 obj,
                 rise_azim,
                 set_azim,

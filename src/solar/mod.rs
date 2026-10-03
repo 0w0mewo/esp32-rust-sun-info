@@ -1,4 +1,4 @@
-use fasttime::{OffsetDateTime, Time};
+use fasttime::{DateTime, Time};
 use libm::{asin, cos, floor, fmod, round, sin};
 
 use crate::{
@@ -42,7 +42,7 @@ impl EventInfo {
 
 impl SolarObject {
     /// ported from SunCalc: https://github.com/mourner/suncalc
-    pub fn get_pos(&self, jd: f64, delta_t: f64, lat: f64, lon: f64) -> HorizontalCoordinate {
+    fn get_pos(&self, jd: f64, delta_t: f64, lat: f64, lon: f64) -> HorizontalCoordinate {
         let lat_rad = lat.to_radians();
         let lon_rad = lon.to_radians();
         let lst = sidereal_time(jd, lon_rad);
@@ -70,7 +70,7 @@ impl SolarObject {
 
     /// find rise and set JD by brute forcing the crossing point
     /// derive from 'Astronomy on the Personal Computer, ch 3'
-    pub fn get_rise_set(
+    fn get_rise_set(
         &self,
         jd0: f64,
         dt_days: f64,
@@ -161,7 +161,19 @@ impl SolarObject {
 
 pub trait PlanetUpdater {
     /// update horizontal position
-    fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
+    fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64);
     /// update atronomical events, such as rise time, set time, etc
-    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
+    fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64);
+    /// get rise azimuth
+    fn rise_azimuth(&self) -> f64;
+    /// get set azimuth
+    fn set_azimuth(&self) -> f64;
+    /// rise datetime in UTC, return `None` if no rise event
+    fn rise_at(&self) -> Option<f64>;
+    /// set datetime in UTC, return `None` if no set event
+    fn set_at(&self) -> Option<f64>;
+    /// current altitude and azimuth in degrees
+    fn pos(&self) -> HorizontalCoordinate;
+    /// who are you?
+    fn planet(&self) -> SolarObject;
 }

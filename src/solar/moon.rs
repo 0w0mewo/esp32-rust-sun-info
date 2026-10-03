@@ -1,9 +1,9 @@
 use core::f64::consts::TAU;
-use fasttime::{DateTime, OffsetDateTime};
+use fasttime::DateTime;
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
-    HorizontalCoordinate, SECONDS_PER_DAY,
+    HorizontalCoordinate,
     datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
     solar::{EventInfo, PlanetUpdater, SolarObject},
 };
@@ -62,45 +62,42 @@ pub struct Moon {
     phase: Phase,
     /// illumination in percentage
     illumination: f64,
-    /// local JD of upcoming new moon
+    /// JD of upcoming new moon in UTC
     new_moon: f64,
-    /// local JD of upcoming full moon
+    /// JD of upcoming full moon in UTC
     full_moon: f64,
     /// moonrise event info
     moonrise: Option<EventInfo>,
     /// moonset event info
     moonset: Option<EventInfo>,
+    /// current position
     pos: HorizontalCoordinate,
 }
 
 impl PlanetUpdater for Moon {
-    fn update_pos(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        self.pos = SolarObject::Moon.get_pos(now.utc.to_julian(), now.utc.delta_t(), lat, lon);
+    fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
+        self.pos = SolarObject::Moon.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
     }
 
-    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        let now_utc = &now.utc;
-        let jd_today_utc = now.utc.date.to_julian();
-        let tz_offset_sec = now.offset.as_seconds() as f64;
-        let tz_offset_days = tz_offset_sec / SECONDS_PER_DAY;
+    fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
+        let jd_today_utc = utc_now.date.to_julian();
 
-        // upcoming moon events
-        let next_new_moon_jd = upcoming_moon_phase_jd(now_utc, Phase::New); // in UTC
-        self.new_moon = next_new_moon_jd + tz_offset_days;
-        self.full_moon = upcoming_moon_phase_jd(now_utc, Phase::Full) + tz_offset_days;
+        // upcoming moon events in UTC
+        self.new_moon = upcoming_moon_phase_jd(utc_now, Phase::New);
+        self.full_moon = upcoming_moon_phase_jd(utc_now, Phase::Full);
 
         // find the Julian days of last new moon,
         // push back one lunar period and re-calculate it if the day is in the future.
-        let mut jd_last_new_moon = moon_phase_jd(now_utc.decimal_year(), Phase::New);
+        let mut jd_last_new_moon = moon_phase_jd(utc_now.decimal_year(), Phase::New);
         if jd_last_new_moon > jd_today_utc {
             jd_last_new_moon = moon_phase_jd(
-                now_utc.decimal_year_with_offset_days(-LUNAR_ORBIT_PERIOD_AVG),
+                utc_now.decimal_year_with_offset_days(-LUNAR_ORBIT_PERIOD_AVG),
                 Phase::New,
             );
         }
 
         // moonrise and moonset
-        let delta_t = now_utc.delta_t();
+        let delta_t = utc_now.delta_t();
         let (rise, set) = SolarObject::Moon.get_rise_set(
             jd_today_utc,
             delta_t,
@@ -111,17 +108,44 @@ impl PlanetUpdater for Moon {
         self.moonrise = rise;
         self.moonset = set;
 
-        // shift the rise/set time to local time
-        if let (Some(rise), Some(set)) = (self.moonrise.as_mut(), self.moonset.as_mut()) {
-            rise.jd += tz_offset_days;
-            set.jd += tz_offset_days;
-        }
-
         // other stuffs
-        let (age, illumination) =
-            Self::approx_phase(jd_today_utc, jd_last_new_moon, next_new_moon_jd);
+        let (age, illumination) = Self::approx_phase(jd_today_utc, jd_last_new_moon, self.new_moon);
         self.illumination = illumination * 100.0;
         self.phase = Phase::from_age(age);
+    }
+
+    #[inline]
+    fn rise_azimuth(&self) -> f64 {
+        self.moonset
+            .as_ref()
+            .map_or(0.0, |event_info| event_info.azimuth)
+    }
+
+    #[inline]
+    fn set_azimuth(&self) -> f64 {
+        self.moonrise
+            .as_ref()
+            .map_or(0.0, |event_info| event_info.azimuth)
+    }
+
+    #[inline]
+    fn rise_at(&self) -> Option<f64> {
+        self.moonrise.as_ref().map(|ev_info| ev_info.jd)
+    }
+
+    #[inline]
+    fn set_at(&self) -> Option<f64> {
+        self.moonset.as_ref().map(|ev_info| ev_info.jd)
+    }
+
+    #[inline]
+    fn pos(&self) -> HorizontalCoordinate {
+        self.pos
+    }
+
+    #[inline]
+    fn planet(&self) -> SolarObject {
+        SolarObject::Moon
     }
 }
 
@@ -137,51 +161,15 @@ impl Moon {
     }
 
     #[inline]
-    /// upcoming new moon in local time
+    /// upcoming new moon in UTC time
     pub fn upcoming_new_moon(&self) -> DateTime {
         DateTime::from_julian(self.new_moon)
     }
 
     #[inline]
-    /// upcoming full moon in local time
+    /// upcoming full moon in UTC time
     pub fn upcoming_full_moon(&self) -> DateTime {
         DateTime::from_julian(self.full_moon)
-    }
-
-    #[inline]
-    /// moon current azimuth and altitude are in degrees
-    pub fn pos(&self) -> HorizontalCoordinate {
-        self.pos
-    }
-
-    #[inline]
-    /// moon rise in local time, None if no rise event
-    pub fn rise_at(&self) -> Option<DateTime> {
-        self.moonrise
-            .as_ref()
-            .map(|ev_info| DateTime::from_julian(ev_info.jd))
-    }
-
-    #[inline]
-    /// moon set in local time, None if no set event
-    pub fn set_at(&self) -> Option<DateTime> {
-        self.moonset
-            .as_ref()
-            .map(|ev_info| DateTime::from_julian(ev_info.jd))
-    }
-
-    #[inline]
-    pub fn rise_azimuth(&self) -> f64 {
-        self.moonset
-            .as_ref()
-            .map_or(0.0, |event_info| event_info.azimuth)
-    }
-
-    #[inline]
-    pub fn set_azimuth(&self) -> f64 {
-        self.moonrise
-            .as_ref()
-            .map_or(0.0, |event_info| event_info.azimuth)
     }
 
     // lunar age and illumination
