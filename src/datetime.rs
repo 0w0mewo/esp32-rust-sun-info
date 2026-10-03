@@ -3,10 +3,7 @@ use core::f64::consts::TAU;
 use fasttime::{Date, DateTime, OffsetDateTime, Time, UtcOffset};
 use libm::floor;
 
-use crate::{
-    HOUR_PER_RAD, SECONDS_PER_DAY,
-    config::{TZ_DST_END, TZ_DST_START},
-};
+use crate::{HOUR_PER_RAD, SECONDS_PER_DAY, config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR}};
 
 pub const J2000: f64 = 2451545.0;
 pub const J1970: f64 = 2440588.0;
@@ -203,20 +200,36 @@ impl UtOffsetExt for OffsetDateTime {
     }
 
     fn add_ut_offset(&self, _tz_std_offset: Option<&UtcOffset>) -> Self {
-        let dst_offset = if self.is_dst() { 3600 } else { 0 };
-
-        self.add_duration(fasttime::Duration::seconds(dst_offset))
+        // OffsetDateTime had applied the standard timezone offset already
+        self.add_duration(fasttime::Duration::seconds(self.dst_offset_seconds()))
             .unwrap()
     }
 }
 
+/// assume UTC
 impl UtOffsetExt for DateTime {
     fn is_dst(&self) -> bool {
-        let unix_sec = self.unix_timestamp();
+        if TZ_DST_RULES.is_empty() {
+            return false;
+        }
 
-        match (TZ_DST_START, TZ_DST_END) {
-            (Some(dst_start), Some(dst_end)) => !(dst_end..=dst_start).contains(&unix_sec),
-            _ => false,
+        // get the rule for current year from LUT
+        let tz_dst_lut_idx = self.year() as usize - TZ_DST_RULES_START_YEAR;
+        let tz_dst_rule = TZ_DST_RULES.get(tz_dst_lut_idx);
+
+        if let Some(tz_dst_rule) = tz_dst_rule {
+            let unix_sec = self.unix_timestamp();
+            let dst_start = tz_dst_rule.0;
+            let dst_end = tz_dst_rule.1;
+
+            if dst_end < dst_start {
+                // some zones in the southern hemisphere, like Australia
+                !(dst_end..=dst_start).contains(&unix_sec)
+            } else {
+                (dst_start..=dst_end).contains(&unix_sec)
+            }
+        } else {
+            false
         }
     }
 
