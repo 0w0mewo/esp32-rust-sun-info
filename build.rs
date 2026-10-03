@@ -79,8 +79,8 @@ fn populate_configs() -> std::io::Result<()> {
 
     // find timezone offset seconds by lat and lon
     let tz_finder = tzf_rs::DefaultFinder::new();
-    let tz = tz_finder.get_tz_name(lon, lat);
-    let tz = tz::TimeZone::from_posix_tz(tz).unwrap_or(tz::TimeZone::utc());
+    let tz_str = tz_finder.get_tz_name(lon, lat);
+    let tz = tz::TimeZone::from_posix_tz(tz_str).unwrap_or(tz::TimeZone::utc());
 
     // find DST rules of the timezone
     let mut dst_transit_table: Vec<DstRule> = Vec::new();
@@ -112,7 +112,8 @@ fn populate_configs() -> std::io::Result<()> {
 //!
 pub const UPDATE_SEC: u64 = {update_sec};
 pub const LAT: f64 = {lat};
-pub const LON: f64 = {lon};
+pub const LON: f64 = {lon}; // {tz_str}
+
 /// standard time zone offset reference to UTC, without DST rules
 pub const TZ_OFFSET_SECS: i32 = {tz_offset_secs};
 
