@@ -85,7 +85,7 @@ fn populate_configs() -> std::io::Result<()> {
     // find DST rules of the timezone
     let mut dst_transit_table: Vec<DstRule> = Vec::new();
     let dst_transit_table_start_year = time::UtcDateTime::now().year();
-    for yr in dst_transit_table_start_year..2100 {
+    for yr in dst_transit_table_start_year..=2050 {
         if let Some(tz_dst_rule) = DstRule::find_dst_rules(yr, &tz) {
             dst_transit_table.push(tz_dst_rule);
         }

@@ -3,7 +3,10 @@ use core::f64::consts::TAU;
 use fasttime::{Date, DateTime, OffsetDateTime, Time, UtcOffset};
 use libm::floor;
 
-use crate::{HOUR_PER_RAD, SECONDS_PER_DAY, config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR}};
+use crate::{
+    HOUR_PER_RAD, SECONDS_PER_DAY,
+    config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR},
+};
 
 pub const J2000: f64 = 2451545.0;
 pub const J1970: f64 = 2440588.0;
@@ -215,9 +218,7 @@ impl UtOffsetExt for DateTime {
 
         // get the rule for current year from LUT
         let tz_dst_lut_idx = self.year() as usize - TZ_DST_RULES_START_YEAR;
-        let tz_dst_rule = TZ_DST_RULES.get(tz_dst_lut_idx);
-
-        if let Some(tz_dst_rule) = tz_dst_rule {
+        TZ_DST_RULES.get(tz_dst_lut_idx).is_some_and(|tz_dst_rule| {
             let unix_sec = self.unix_timestamp();
             let dst_start = tz_dst_rule.0;
             let dst_end = tz_dst_rule.1;
@@ -228,9 +229,7 @@ impl UtOffsetExt for DateTime {
             } else {
                 (dst_start..=dst_end).contains(&unix_sec)
             }
-        } else {
-            false
-        }
+        })
     }
 
     fn add_ut_offset(&self, tz_std_offset: Option<&UtcOffset>) -> Self {
