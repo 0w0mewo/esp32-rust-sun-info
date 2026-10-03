@@ -226,7 +226,7 @@ impl UpdateCmd {
 
         // update sun info view
         (UpdateCmd::SetSolar {
-            day_progress: sun.day_progress(&datetime.utc.time),
+            day_progress: sun.day_progress(datetime),
             sundusk_at,
             sundawn_at,
         })

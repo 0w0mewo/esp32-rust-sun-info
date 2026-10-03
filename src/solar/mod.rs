@@ -1,9 +1,9 @@
-use fasttime::{DateTime, Time};
+use fasttime::DateTime;
 use libm::{asin, cos, floor, fmod, round, sin};
 
 use crate::{
     HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{DAY_PER_HOUR, J2000, MIDNIGHT, sidereal_time},
+    datetime::{DAY_PER_HOUR, J2000, sidereal_time},
     sine_altitude,
     solar::{moon::moon_coord, sun::sun_coord},
 };
@@ -26,17 +26,18 @@ pub struct EventInfo {
 }
 
 impl EventInfo {
-    /// time of the event
-    pub fn time(&self) -> Time {
-        let secs_since_midnight = self.seconds_since_midnight();
+    /// event time in seconds since midnight in local time
+    pub fn seconds_since_midnight_local(&self, ut_offset_days: f64) -> u32 {
+        let jd_local = self.jd + ut_offset_days;
+        let day_frac = jd_local - floor(jd_local) + 0.5; // fraction of a day, 0.0 is midnight
 
-        Time::from_seconds_nanos(round(secs_since_midnight) as u32, 0).unwrap_or(MIDNIGHT)
+        round(fmod(day_frac * SECONDS_PER_DAY, SECONDS_PER_DAY)) as u32
     }
 
-    /// seconds since midnight
-    pub fn seconds_since_midnight(&self) -> f64 {
-        let day_frac = self.jd - floor(self.jd) + 0.5; // fraction of a day, 0.0 is midnight
-        fmod(day_frac * SECONDS_PER_DAY, SECONDS_PER_DAY)
+    /// event time in seconds since midnight in UTC
+    #[inline]
+    pub fn seconds_since_midnight(&self) -> u32 {
+        self.seconds_since_midnight_local(0.0)
     }
 }
 
@@ -106,10 +107,14 @@ impl SolarObject {
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
-        // search for rise/set in -12 hours to 24 hours interval (36 hours total)
-        let mut hour_offset = -11.0;
+        // search for rise/set in 0 hours to 48 hours interval
+        let mut hour_offset = 1.0;
         let mut y_minus = sin_altitude(hour_offset - 1.0);
-        while hour_offset <= 25.0 || (jd_rise.is_none() && jd_set.is_none()) {
+        while hour_offset <= 48.0 {
+            if jd_rise.is_some() && jd_set.is_some() {
+                break;
+            }
+
             let y0 = sin_altitude(hour_offset);
             let y_plus = sin_altitude(hour_offset + 1.0);
 

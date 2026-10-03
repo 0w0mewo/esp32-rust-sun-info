@@ -1,4 +1,4 @@
-use fasttime::{DateTime, Time};
+use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, sin, sincos};
 use smart_leds::{RGB, RGB8};
 
@@ -143,17 +143,21 @@ impl Sun {
     }
 
     /// daytime progress, `None` if it's after sunset
-    pub fn day_progress(&self, utc_now: &Time) -> DayProgress {
-        let now = utc_now.seconds_since_midnight() as f64;
+    /// Note: `now` should be the standard timezone offsetted datetime without DST push forward
+    pub fn day_progress(&self, now: &OffsetDateTime) -> DayProgress {
+        let offset = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
+        let now = now.to_local().unwrap().time.seconds_since_midnight();
+
+        // convert rise/set time in seconds since midnight local time, the `EventInfo` assume the event time is in UTC
         let rise = self
             .rise
             .as_ref()
-            .map(|ev| ev.seconds_since_midnight())
+            .map(|ev| ev.seconds_since_midnight_local(offset))
             .unwrap_or_default();
         let set = self
             .set
             .as_ref()
-            .map(|ev| ev.seconds_since_midnight())
+            .map(|ev| ev.seconds_since_midnight_local(offset))
             .unwrap_or_default();
 
         // invalid rise/set time or after sunset or before sunrise
@@ -162,11 +166,11 @@ impl Sun {
         }
 
         // sunrise < now < sunset, so it should be safe to subtract two unsigned integers
-        let day_prog = (now - rise) / self.daytime_length;
+        let day_prog = now.saturating_sub(rise) as f64 / self.daytime_length;
         DayProgress::Day(day_prog.clamp(0.0, 1.0))
     }
 
-    pub fn color_at(&self, now: &Time) -> RGB8 {
+    pub fn color_at(&self, now: &OffsetDateTime) -> RGB8 {
         const NOON_COLOR: RGB<f64> = RGB::new(255.0, 254.0, 250.0);
         const END_OF_DAY_COLOR: RGB<f64> = RGB::new(255.0, 166.0, 87.0);
 

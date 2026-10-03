@@ -88,7 +88,6 @@ async fn main(spawner: Spawner) -> ! {
             rtc_now.rem_euclid(MICROSECS_PER_SEC) as i32,
         ) {
             let now = OffsetDateTime::from_utc(utc_now, tz_offset_std);
-            let now_local = now.to_local().unwrap();
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 last_ntp_status = new_ntp_status;
@@ -142,11 +141,8 @@ async fn main(spawner: Spawner) -> ! {
 
             // RGB LED color as sun color
             // LED brightness as day progress
-            let brigtness = sun
-                .day_progress(&now_local.time)
-                .to_pwm_duty_cycle_percent()
-                .max(15);
-            let sun_color = sun.color_at(&now_local.time);
+            let brigtness = sun.day_progress(&now).to_pwm_duty_cycle_percent().max(15);
+            let sun_color = sun.color_at(&now);
             board.set_rgb_led_color(sun_color, brigtness).await;
         }
     }
