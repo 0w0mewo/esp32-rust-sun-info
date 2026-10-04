@@ -3,7 +3,7 @@ use libm::{asin, atan2, cos, floor, sin, sincos};
 use smart_leds::{RGB, RGB8};
 
 use crate::{
-    DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate, SECONDS_PER_DAY,
+    DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate,
     datetime::{AstronDatetimeExt, J2000, delta_t_2000},
     solar::{EventInfo, PlanetUpdater, SolarObject},
 };
@@ -54,7 +54,7 @@ pub struct Sun {
     dusk: Option<EventInfo>,
     /// current position
     pos: HorizontalCoordinate,
-    /// day length in seconds
+    /// day length between [0, 1]
     daytime_length: f64,
 }
 
@@ -77,9 +77,9 @@ impl PlanetUpdater for Sun {
         let (dawn, dusk) =
             SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
-        // daytime length in seconds
+        // daytime length in fractional day
         if let (Some(rise), Some(set)) = (rise.as_ref(), set.as_ref()) {
-            self.daytime_length = (set.jd - rise.jd).abs() * SECONDS_PER_DAY;
+            self.daytime_length = (set.jd - rise.jd).abs();
         }
 
         self.rise = rise;
@@ -143,22 +143,12 @@ impl Sun {
     }
 
     /// daytime progress, `None` if it's after sunset
-    /// Note: `now` should be the standard timezone offsetted datetime without DST push forward
     pub fn day_progress(&self, now: &OffsetDateTime) -> DayProgress {
-        let offset = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
-        let now = now.to_local().unwrap().time.seconds_since_midnight();
+        let now = now.utc.to_julian();
 
         // convert rise/set time in seconds since midnight local time, the `EventInfo` assume the event time is in UTC
-        let rise = self
-            .rise
-            .as_ref()
-            .map(|ev| ev.seconds_since_midnight_local(offset))
-            .unwrap_or_default();
-        let set = self
-            .set
-            .as_ref()
-            .map(|ev| ev.seconds_since_midnight_local(offset))
-            .unwrap_or_default();
+        let rise = self.rise.as_ref().map(|ev| ev.jd).unwrap_or_default();
+        let set = self.set.as_ref().map(|ev| ev.jd).unwrap_or_default();
 
         // invalid rise/set time or after sunset or before sunrise
         if set < rise || set < now || rise > now {
@@ -166,7 +156,7 @@ impl Sun {
         }
 
         // sunrise < now < sunset, so it should be safe to subtract two unsigned integers
-        let day_prog = now.saturating_sub(rise) as f64 / self.daytime_length;
+        let day_prog = (now - rise) / self.daytime_length;
         DayProgress::Day(day_prog.clamp(0.0, 1.0))
     }
 

@@ -19,7 +19,7 @@ pub enum SolarObject {
 
 #[derive(Clone, Default)]
 pub struct EventInfo {
-    /// rise/set event info
+    /// rise/set event JD in UT
     pub jd: f64,
     /// rise/set azimuth, in degrees
     pub azimuth: f64,
@@ -107,10 +107,10 @@ impl SolarObject {
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
-        // search for rise/set in 0 hours to 48 hours interval
-        let mut hour_offset = 1.0;
+        // search for rise/set in -24 hours to 24 hours interval
+        let mut hour_offset = -23.0;
         let mut y_minus = sin_altitude(hour_offset - 1.0);
-        while hour_offset <= 48.0 {
+        while hour_offset <= 24.0 {
             if jd_rise.is_some() && jd_set.is_some() {
                 break;
             }
@@ -125,10 +125,16 @@ impl SolarObject {
                     QuadraticRoots::One { root } => {
                         let t = hour_offset + root;
                         let t = t * DAY_PER_HOUR + jd0; // decimal hour to JD
+
+                        // only populate the rise/set time when it's empty
                         if y_minus < 0.0 {
-                            jd_rise.replace(t);
+                            if jd_rise.is_none() {
+                                jd_rise.replace(t);
+                            }
                         } else {
-                            jd_set.replace(t);
+                            if jd_set.is_none() {
+                                jd_set.replace(t);
+                            }
                         }
                     }
                     QuadraticRoots::Two { root1, root2 } => {
@@ -136,14 +142,32 @@ impl SolarObject {
                         let t2 = hour_offset + root2;
                         let t1 = t1 * DAY_PER_HOUR + jd0; // decimal hour to JD
                         let t2 = t2 * DAY_PER_HOUR + jd0;
+                        
+                        // only populate the rise/set time when it's empty
                         if quadratic.y_extremum() < 0.0 {
-                            jd_rise.replace(t2);
-                            jd_set.replace(t1);
+                            if jd_rise.is_none() {
+                                jd_rise.replace(t2);
+                            }
+                            if jd_set.is_none() {
+                                jd_set.replace(t1);
+                            }
                         } else {
-                            jd_rise.replace(t1);
-                            jd_set.replace(t2);
+                            if jd_rise.is_none() {
+                                jd_rise.replace(t1);
+                            }
+                            if jd_set.is_none() {
+                                jd_set.replace(t2);
+                            }
                         }
                     }
+                }
+
+                // re-search the set time when rise > set, care only about the upcoming set event
+                if let Some(jd_r) = jd_rise
+                    && let Some(jd_s) = jd_set
+                    && jd_r > jd_s
+                {
+                    jd_set = None;
                 }
             }
 
