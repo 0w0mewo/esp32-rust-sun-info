@@ -69,7 +69,9 @@ impl SolarObject {
         pos.apparent_altitude()
     }
 
-    /// find rise and set JD by brute forcing the crossing point
+    /// find rise and set JD by brute forcing the crossing point,
+    /// it searches back 24 hours and forward 24 hours refers to `jd0`
+    /// `jd0`: initial julian day of search of interested in UT,
     /// derive from 'Astronomy on the Personal Computer, ch 3'
     fn get_rise_set(
         &self,

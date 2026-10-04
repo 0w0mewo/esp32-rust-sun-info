@@ -64,18 +64,18 @@ impl PlanetUpdater for Sun {
     }
 
     fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
-        let jd_today_utc = utc_now.date.to_julian();
+        let jd_utc = utc_now.to_julian();
         let delta_t = utc_now.delta_t();
 
         let (rise, set) = SolarObject::Sun.get_rise_set(
-            jd_today_utc,
+            jd_utc,
             delta_t,
             lat,
             lon,
             SOLAR_EDGE_REFRACTION_RAD,
         );
         let (dawn, dusk) =
-            SolarObject::Sun.get_rise_set(jd_today_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
+            SolarObject::Sun.get_rise_set(jd_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
         // daytime length in fractional day
         if let (Some(rise), Some(set)) = (rise.as_ref(), set.as_ref()) {

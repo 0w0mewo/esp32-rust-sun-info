@@ -80,7 +80,7 @@ impl PlanetUpdater for Moon {
     }
 
     fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
-        let jd_today_utc = utc_now.date.to_julian();
+        let jd_utc = utc_now.to_julian();
 
         // upcoming moon events in UTC
         self.new_moon = upcoming_moon_phase_jd(utc_now, Phase::New);
@@ -89,7 +89,7 @@ impl PlanetUpdater for Moon {
         // find the Julian days of last new moon,
         // push back one lunar period and re-calculate it if the day is in the future.
         let mut jd_last_new_moon = moon_phase_jd(utc_now.decimal_year(), Phase::New);
-        if jd_last_new_moon > jd_today_utc {
+        if jd_last_new_moon > jd_utc {
             jd_last_new_moon = moon_phase_jd(
                 utc_now.decimal_year_with_offset_days(-LUNAR_ORBIT_PERIOD_AVG),
                 Phase::New,
@@ -99,7 +99,7 @@ impl PlanetUpdater for Moon {
         // moonrise and moonset
         let delta_t = utc_now.delta_t();
         let (rise, set) = SolarObject::Moon.get_rise_set(
-            jd_today_utc,
+            jd_utc,
             delta_t,
             lat,
             lon,
@@ -109,7 +109,7 @@ impl PlanetUpdater for Moon {
         self.moonset = set;
 
         // other stuffs
-        let (age, illumination) = Self::approx_phase(jd_today_utc, jd_last_new_moon, self.new_moon);
+        let (age, illumination) = Self::approx_phase(jd_utc, jd_last_new_moon, self.new_moon);
         self.illumination = illumination * 100.0;
         self.phase = Phase::from_age(age);
     }
