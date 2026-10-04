@@ -98,13 +98,8 @@ impl PlanetUpdater for Moon {
 
         // moonrise and moonset
         let delta_t = utc_now.delta_t();
-        let (rise, set) = SolarObject::Moon.get_rise_set(
-            jd_utc,
-            delta_t,
-            lat,
-            lon,
-            LUNAR_EDGE_REFRACTION_RAD,
-        );
+        let (rise, set) =
+            SolarObject::Moon.get_rise_set(jd_utc, delta_t, lat, lon, LUNAR_EDGE_REFRACTION_RAD);
         self.moonrise = rise;
         self.moonset = set;
 

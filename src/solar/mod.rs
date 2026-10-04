@@ -69,7 +69,7 @@ impl SolarObject {
         pos.apparent_altitude()
     }
 
-    /// find rise and set JD by brute forcing the crossing point,
+    /// find upcoming rise and set JD by brute forcing the crossing point,
     /// it searches back 24 hours and forward 24 hours refers to `jd0`
     /// `jd0`: initial julian day of search of interested in UT,
     /// derive from 'Astronomy on the Personal Computer, ch 3'
@@ -109,8 +109,8 @@ impl SolarObject {
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
-        // search for rise/set in -24 hours to 24 hours interval
-        let mut hour_offset = -23.0;
+        // search for any rise/set in jd0 - 24 hours to jd0 + 24 hours interval
+        let mut hour_offset = -24.0;
         let mut y_minus = sin_altitude(hour_offset - 1.0);
         while hour_offset <= 24.0 {
             if jd_rise.is_some() && jd_set.is_some() {
@@ -142,34 +142,35 @@ impl SolarObject {
                     QuadraticRoots::Two { root1, root2 } => {
                         let t1 = hour_offset + root1;
                         let t2 = hour_offset + root2;
-                        let t1 = t1 * DAY_PER_HOUR + jd0; // decimal hour to JD
-                        let t2 = t2 * DAY_PER_HOUR + jd0;
-                        
-                        // only populate the rise/set time when it's empty
+                        let mut t1 = t1 * DAY_PER_HOUR + jd0; // decimal hour to JD
+                        let mut t2 = t2 * DAY_PER_HOUR + jd0;
+
                         if quadratic.y_extremum() < 0.0 {
-                            if jd_rise.is_none() {
-                                jd_rise.replace(t2);
-                            }
-                            if jd_set.is_none() {
-                                jd_set.replace(t1);
-                            }
-                        } else {
-                            if jd_rise.is_none() {
-                                jd_rise.replace(t1);
-                            }
-                            if jd_set.is_none() {
-                                jd_set.replace(t2);
-                            }
+                            core::mem::swap(&mut t1, &mut t2);
+                        }
+
+                        // only populate the rise/set time when it's empty
+                        if jd_rise.is_none() {
+                            jd_rise.replace(t1);
+                        }
+                        if jd_set.is_none() {
+                            jd_set.replace(t2);
                         }
                     }
                 }
 
-                // re-search the set time when rise > set, care only about the upcoming set event
-                if let Some(jd_r) = jd_rise
-                    && let Some(jd_s) = jd_set
-                    && jd_r > jd_s
-                {
-                    jd_set = None;
+                // only keep the upcoming rise time
+                if let Some(jd_r) = jd_rise {
+                    if jd_r < jd0 {
+                        jd_rise = None;
+                    }
+
+                    // only keep the set time that is after last rised but haven't set yet
+                    if let Some(jd_s) = jd_set
+                        && jd_s < jd0
+                    {
+                        jd_set = None;
+                    }
                 }
             }
 

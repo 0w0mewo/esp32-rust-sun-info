@@ -141,8 +141,9 @@ async fn main(spawner: Spawner) -> ! {
 
             // RGB LED color as sun color
             // LED brightness as day progress
-            let brigtness = sun.day_progress(&now).to_pwm_duty_cycle_percent().max(15);
-            let sun_color = sun.color_at(&now);
+            let day_prog = sun.day_progress(&now);
+            let brigtness = day_prog.to_pwm_duty_cycle_percent().max(15);
+            let sun_color = sun.color_at(day_prog);
             board.set_rgb_led_color(sun_color, brigtness).await;
         }
     }
