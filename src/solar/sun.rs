@@ -4,7 +4,7 @@ use smart_leds::{RGB, RGB8};
 
 use crate::{
     DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate,
-    datetime::{AstronDatetimeExt, J2000, MIDNIGHT, UNIX_EPOCH, delta_t_2000},
+    datetime::{AstronDatetimeExt, J2000, delta_t_2000},
     solar::{EventInfo, PlanetUpdater, SolarObject},
 };
 
@@ -64,20 +64,9 @@ impl PlanetUpdater for Sun {
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
-        let midnight = {
-            let now_local = now.to_local().unwrap_or(UNIX_EPOCH);
-            OffsetDateTime::from_local(now_local.date, MIDNIGHT, now.offset)
-                .unwrap()
-                .utc
-        }; // local midnight in UTC
-
         // start searching at local midnight
-        let jd0 = midnight.to_julian();
-        let delta_t = midnight.delta_t();
-        let (rise, set) =
-            SolarObject::Sun.get_rise_set(jd0, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
-        let (dawn, dusk) =
-            SolarObject::Sun.get_rise_set(jd0, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
+        let (rise, set) = SolarObject::Sun.get_rise_set(now, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
+        let (dawn, dusk) = SolarObject::Sun.get_rise_set(now, lat, lon, TWILIGHT_REFRACTION_RAD);
 
         // daytime length
         if let (Some(rise), Some(set)) = (rise.as_ref(), set.as_ref()) {

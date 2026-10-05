@@ -3,7 +3,7 @@ use libm::{asin, cos, floor, fmod, round, sin};
 
 use crate::{
     HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{DAY_PER_HOUR, J2000, sidereal_time},
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, MIDNIGHT, UNIX_EPOCH, sidereal_time},
     sine_altitude,
     solar::{moon::moon_coord, sun::sun_coord},
 };
@@ -69,20 +69,64 @@ impl SolarObject {
         pos.apparent_altitude()
     }
 
-    /// find upcoming rise and set JD by brute forcing the crossing point,
-    /// it searches back 24 hours and forward 24 hours refers to `jd0`
-    /// `jd0`: initial julian day of search of interested in UT,
-    /// derive from 'Astronomy on the Personal Computer, ch 3'
+    /// find upcoming rise and set events,
+    /// it searches forward 24 hours refers to the local midnight
+    ///
+    /// the event JD is in UT
+    #[inline]
     fn get_rise_set(
         &self,
-        jd0: f64,
-        dt_days: f64,
+        now: &OffsetDateTime,
+        lat: f64,
+        lon: f64,
+        refracted_horizon_rad: f64,
+    ) -> (Option<EventInfo>, Option<EventInfo>) {
+        self.get_rise_set_with_range(now, 0, 24, lat, lon, refracted_horizon_rad)
+    }
+
+    /// find upcoming rise and set events in Stellarium's planets visibility style, which is
+    /// searching 12 hours forward and 12 hours backward, refers to the local midnight
+    ///
+    /// the event JD is in UT
+    #[inline]
+    fn get_rise_set_tonight(
+        &self,
+        now: &OffsetDateTime,
+        lat: f64,
+        lon: f64,
+        refracted_horizon_rad: f64,
+    ) -> (Option<EventInfo>, Option<EventInfo>) {
+        self.get_rise_set_with_range(now, 12, 12, lat, lon, refracted_horizon_rad)
+    }
+
+    /// find upcoming rise and set events by brute forcing the crossing point,
+    /// it searches `hr_forward` hours forward and `hr_backward` hours backward refers to the local midnight
+    ///
+    /// the event JD is in UT
+    ///
+    /// derive from 'Astronomy on the Personal Computer, ch 3'
+    fn get_rise_set_with_range(
+        &self,
+        now: &OffsetDateTime,
+        hr_backward: u8,
+        hr_forward: u8,
         lat: f64,
         lon: f64,
         refracted_horizon_rad: f64,
     ) -> (Option<EventInfo>, Option<EventInfo>) {
         let lat_rad = lat.to_radians();
         let lon_rad = lon.to_radians();
+
+        // local midnight in UTC
+        let midnight = {
+            let now_local = now.to_local().unwrap_or(UNIX_EPOCH);
+            OffsetDateTime::from_local(now_local.date, MIDNIGHT, now.offset)
+                .unwrap()
+                .utc
+        };
+
+        let jd0 = midnight.to_julian();
+        let dt_days = midnight.delta_t(); // delta T
 
         // refraction
         let refracted_sine_horizon_altitude = sin(refracted_horizon_rad);
@@ -109,10 +153,10 @@ impl SolarObject {
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
-        // search for any rise/set in jd0 - 24 hours to jd0 + 24 hours interval
-        let mut hour_offset = -24.0;
+        // search for any rise/set in jd0 - hr_backward hours to jd0 + hr_forward hours interval
+        let mut hour_offset = -(hr_backward as f64) + 1.0;
         let mut y_minus = sin_altitude(hour_offset - 1.0);
-        while hour_offset <= 24.0 {
+        while hour_offset <= hr_forward as f64 {
             if jd_rise.is_some() && jd_set.is_some() {
                 break;
             }
@@ -128,15 +172,10 @@ impl SolarObject {
                         let t = hour_offset + root;
                         let t = t * DAY_PER_HOUR + jd0; // decimal hour to JD
 
-                        // only populate the rise/set time when it's empty
                         if y_minus < 0.0 {
-                            if jd_rise.is_none() {
-                                jd_rise.replace(t);
-                            }
+                            jd_rise.replace(t);
                         } else {
-                            if jd_set.is_none() {
-                                jd_set.replace(t);
-                            }
+                            jd_set.replace(t);
                         }
                     }
                     QuadraticRoots::Two { root1, root2 } => {
@@ -149,27 +188,8 @@ impl SolarObject {
                             core::mem::swap(&mut t1, &mut t2);
                         }
 
-                        // only populate the rise/set time when it's empty
-                        if jd_rise.is_none() {
-                            jd_rise.replace(t1);
-                        }
-                        if jd_set.is_none() {
-                            jd_set.replace(t2);
-                        }
-                    }
-                }
-
-                // only keep the upcoming rise time
-                if let Some(jd_r) = jd_rise {
-                    if jd_r < jd0 {
-                        jd_rise = None;
-                    }
-
-                    // only keep the set time that is after last rised but haven't set yet
-                    if let Some(jd_s) = jd_set
-                        && jd_s < jd0
-                    {
-                        jd_set = None;
+                        jd_rise.replace(t1);
+                        jd_set.replace(t2);
                     }
                 }
             }
