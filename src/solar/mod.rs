@@ -1,4 +1,4 @@
-use fasttime::DateTime;
+use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, cos, floor, fmod, round, sin};
 
 use crate::{
@@ -195,7 +195,7 @@ pub trait PlanetUpdater {
     /// update horizontal position
     fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64);
     /// update atronomical events, such as rise time, set time, etc
-    fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64);
+    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
     /// get rise azimuth
     fn rise_azimuth(&self) -> f64;
     /// get set azimuth

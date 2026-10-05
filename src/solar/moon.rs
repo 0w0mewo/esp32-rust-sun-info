@@ -1,10 +1,10 @@
 use core::f64::consts::TAU;
-use fasttime::DateTime;
+use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 
 use crate::{
     HorizontalCoordinate,
-    datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
+    datetime::{AstronDatetimeExt, DateExt, NOON, UNIX_EPOCH, delta_t_2000},
     solar::{EventInfo, PlanetUpdater, SolarObject},
 };
 
@@ -79,10 +79,17 @@ impl PlanetUpdater for Moon {
         self.pos = SolarObject::Moon.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
     }
 
-    fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
-        let jd_utc = utc_now.to_julian();
+    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
+        let noon_utc = {
+            let now_local = now.to_local().unwrap_or(UNIX_EPOCH);
+            OffsetDateTime::from_local(now_local.date, NOON, now.offset)
+                .unwrap()
+                .utc
+        }; // local noon in UTC
 
         // upcoming moon events in UTC
+        let utc_now = &now.utc;
+        let jd_utc = utc_now.to_julian();
         self.new_moon = upcoming_moon_phase_jd(utc_now, Phase::New);
         self.full_moon = upcoming_moon_phase_jd(utc_now, Phase::Full);
 
@@ -96,10 +103,11 @@ impl PlanetUpdater for Moon {
             );
         }
 
-        // moonrise and moonset
-        let delta_t = utc_now.delta_t();
+        // moonrise and moonset, start searching at local noon
+        let jd0 = noon_utc.to_julian();
+        let delta_t = noon_utc.delta_t();
         let (rise, set) =
-            SolarObject::Moon.get_rise_set(jd_utc, delta_t, lat, lon, LUNAR_EDGE_REFRACTION_RAD);
+            SolarObject::Moon.get_rise_set(jd0, delta_t, lat, lon, LUNAR_EDGE_REFRACTION_RAD);
         self.moonrise = rise;
         self.moonset = set;
 

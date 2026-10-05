@@ -3,8 +3,8 @@ use libm::{asin, atan2, cos, floor, sin, sincos};
 use smart_leds::{RGB, RGB8};
 
 use crate::{
-    DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, J2000, delta_t_2000},
+    DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate,
+    datetime::{AstronDatetimeExt, J2000, MIDNIGHT, UNIX_EPOCH, delta_t_2000},
     solar::{EventInfo, PlanetUpdater, SolarObject},
 };
 
@@ -54,7 +54,7 @@ pub struct Sun {
     dusk: Option<EventInfo>,
     /// current position
     pos: HorizontalCoordinate,
-    /// day length in seconds
+    /// day length in fractional day between [0, 1]
     daytime_length: f64,
 }
 
@@ -63,18 +63,25 @@ impl PlanetUpdater for Sun {
         self.pos = SolarObject::Sun.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
     }
 
-    fn update_astron(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
-        let jd_utc = utc_now.to_julian();
-        let delta_t = utc_now.delta_t();
+    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
+        let midnight = {
+            let now_local = now.to_local().unwrap_or(UNIX_EPOCH);
+            OffsetDateTime::from_local(now_local.date, MIDNIGHT, now.offset)
+                .unwrap()
+                .utc
+        }; // local midnight in UTC
 
+        // start searching at local midnight
+        let jd0 = midnight.to_julian();
+        let delta_t = midnight.delta_t();
         let (rise, set) =
-            SolarObject::Sun.get_rise_set(jd_utc, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
+            SolarObject::Sun.get_rise_set(jd0, delta_t, lat, lon, SOLAR_EDGE_REFRACTION_RAD);
         let (dawn, dusk) =
-            SolarObject::Sun.get_rise_set(jd_utc, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
+            SolarObject::Sun.get_rise_set(jd0, delta_t, lat, lon, TWILIGHT_REFRACTION_RAD);
 
-        // daytime length in seconds
+        // daytime length
         if let (Some(rise), Some(set)) = (rise.as_ref(), set.as_ref()) {
-            self.daytime_length = (set.jd - rise.jd).abs() * SECONDS_PER_DAY;
+            self.daytime_length = (set.jd - rise.jd).abs();
         }
 
         self.rise = rise;
@@ -139,20 +146,11 @@ impl Sun {
 
     /// daytime progress, `None` if it's after sunset
     pub fn day_progress(&self, now: &OffsetDateTime) -> DayProgress {
-        let ut_offset_days = now.offset.as_seconds() as f64 / SECONDS_PER_DAY;
-        let now = now.to_local().unwrap().time.seconds_since_midnight();
+        let now = now.utc.to_julian();
 
         // convert rise/set time in seconds since midnight local time, the `EventInfo` assume the event time is in UTC
-        let rise = self
-            .rise
-            .as_ref()
-            .map(|ev| ev.seconds_since_midnight_local(ut_offset_days))
-            .unwrap_or_default();
-        let set = self
-            .set
-            .as_ref()
-            .map(|ev| ev.seconds_since_midnight_local(ut_offset_days))
-            .unwrap_or_default();
+        let rise = self.rise.as_ref().map(|ev| ev.jd).unwrap_or_default();
+        let set = self.set.as_ref().map(|ev| ev.jd).unwrap_or_default();
 
         // invalid rise/set time or after sunset or before sunrise
         if set < rise || set < now || rise > now {
@@ -160,7 +158,7 @@ impl Sun {
         }
 
         // sunrise < now < sunset, so it should be safe to subtract two unsigned integers
-        let day_prog = now.saturating_sub(rise) as f64 / self.daytime_length;
+        let day_prog = (now - rise) / self.daytime_length;
         DayProgress::Day(day_prog.clamp(0.0, 1.0))
     }
 

@@ -22,6 +22,12 @@ pub const MIDNIGHT: Time = Time {
     second: 0,
     nanosecond: 0,
 };
+pub const NOON: Time = Time {
+    hour: 12,
+    minute: 0,
+    second: 0,
+    nanosecond: 0,
+};
 pub const UNIX_EPOCH: DateTime = DateTime {
     date: D1970,
     time: MIDNIGHT,

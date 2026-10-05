@@ -97,8 +97,8 @@ async fn main(spawner: Spawner) -> ! {
                 && first_run
             {
                 // make sure the moon and sun are updated at the first NTP synced
-                sun.update_astron(&utc_now, lat, lon);
-                moon.update_astron(&utc_now, lat, lon);
+                sun.update_astron(&now, lat, lon);
+                moon.update_astron(&now, lat, lon);
 
                 // update seasons start time
                 ui::UpdateCmd::update_season_start(&now, lat).await;
@@ -115,8 +115,8 @@ async fn main(spawner: Spawner) -> ! {
             {
                 // infrequently update sun and moon atronomical events
                 embassy_futures::select::Either::First(_) => {
-                    sun.update_astron(&utc_now, lat, lon);
-                    moon.update_astron(&utc_now, lat, lon);
+                    sun.update_astron(&now, lat, lon);
+                    moon.update_astron(&now, lat, lon);
                 }
                 // frequently update sun and moon position
                 embassy_futures::select::Either::Second(_) => {
