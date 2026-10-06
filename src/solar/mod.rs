@@ -1,9 +1,9 @@
-use fasttime::{DateTime, OffsetDateTime};
+use fasttime::{DateTime, Duration, OffsetDateTime};
 use libm::{asin, cos, floor, fmod, round, sin};
 
 use crate::{
     HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, MIDNIGHT, UNIX_EPOCH, sidereal_time},
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, MIDNIGHT, NOON, UNIX_EPOCH, sidereal_time},
     sine_altitude,
     solar::{moon::moon_coord, sun::sun_coord},
 };
@@ -96,7 +96,18 @@ impl SolarObject {
         lon: f64,
         refracted_horizon_rad: f64,
     ) -> (Option<EventInfo>, Option<EventInfo>) {
-        self.get_rise_set_with_range(now, 12, 12, lat, lon, refracted_horizon_rad)
+        // the datetime should shift 12 hours forward if it's local afternoon in order to obtain
+        // the rise/set time at the center of midnight of next day rather than the midnight of today
+        let local_now = now.to_local().unwrap();
+        let start_at = if local_now.time >= NOON {
+            &(now
+                .add_duration(Duration::seconds(3600 * 12))
+                .unwrap_or(OffsetDateTime::from_utc(UNIX_EPOCH, now.offset)))
+        } else {
+            now
+        };
+
+        self.get_rise_set_with_range(start_at, 12, 12, lat, lon, refracted_horizon_rad)
     }
 
     /// find upcoming rise and set events by brute forcing the crossing point,
