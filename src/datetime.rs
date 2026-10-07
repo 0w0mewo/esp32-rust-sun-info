@@ -1,7 +1,7 @@
 use core::f64::consts::TAU;
 
 use libm::floor;
-use time::{Date, Duration, OffsetDateTime, PlainDateTime, Timestamp, UtcDateTime, UtcOffset};
+use time::{Date, Duration, OffsetDateTime, PlainDateTime, UtcDateTime, UtcOffset};
 
 use crate::{
     HOUR_PER_RAD, SECONDS_PER_DAY,
@@ -82,9 +82,8 @@ pub trait DateExt {
 
 impl AstronDatetimeExt for PlainDateTime {
     fn from_julian(jd: f64) -> Self {
-        let unix_secs = ((jd - J1970_UNIX_EPOCH) * SECONDS_PER_DAY) as i64;
-        let ts_now = Timestamp::from_seconds(unix_secs).unwrap_or(Timestamp::UNIX_EPOCH);
-        Self::new(ts_now.date(), ts_now.time())
+        let ut = UtcDateTime::from_julian(jd);
+        Self::new(ut.date(), ut.time())
     }
 
     fn to_julian(&self) -> f64 {
