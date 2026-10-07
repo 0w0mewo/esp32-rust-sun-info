@@ -193,14 +193,14 @@ impl UpdateCmd {
         UpdateCmd::SetApStatus(connected_ap.into()).notify().await
     }
 
-    pub async fn notifiy_new_lunar_state(datetime: &OffsetDateTime, moon: &Moon) {
+    pub async fn notify_new_lunar_state(datetime: &OffsetDateTime, moon: &Moon) {
         let next_new_moon_utc = moon.upcoming_new_moon();
         let next_full_moon_utc = moon.upcoming_full_moon();
 
         // apply timezone standard offset and DST
-        let tz_offset = Some(datetime.offset());
-        let next_new_moon = next_new_moon_utc.to_dst_offset(tz_offset).date();
-        let next_full_moon = next_full_moon_utc.to_dst_offset(tz_offset).date();
+        let tz_offset = &datetime.offset();
+        let next_new_moon = next_new_moon_utc.with_dst_offset(tz_offset).date();
+        let next_full_moon = next_full_moon_utc.with_dst_offset(tz_offset).date();
 
         // update moon info view
         (UpdateCmd::SetLunar {
@@ -220,9 +220,9 @@ impl UpdateCmd {
         let sundawn_at = sun.dawn_at().unwrap_or(UtcDateTime::UNIX_EPOCH);
 
         // apply timezone standard offset and DST
-        let tz_offset = Some(datetime.offset());
-        let sundusk_at = sundusk_at.to_dst_offset(tz_offset).time();
-        let sundawn_at = sundawn_at.to_dst_offset(tz_offset).time();
+        let tz_offset = &datetime.offset();
+        let sundusk_at = sundusk_at.with_dst_offset(tz_offset).time();
+        let sundawn_at = sundawn_at.with_dst_offset(tz_offset).time();
 
         // update sun info view
         (UpdateCmd::SetSolar {
@@ -240,13 +240,13 @@ impl UpdateCmd {
         planet: &PLANET,
     ) {
         // convert rise/set to local time
-        let tz_offset = Some(datetime.offset());
+        let tz_offset = &datetime.offset();
         let rise_at = planet
             .rise_at()
-            .map(|jd| UtcDateTime::from_julian(jd).to_dst_offset_plain(tz_offset));
+            .map(|jd| UtcDateTime::from_julian(jd).with_dst_offset_plain(tz_offset));
         let set_at = planet
             .set_at()
-            .map(|jd| UtcDateTime::from_julian(jd).to_dst_offset_plain(tz_offset));
+            .map(|jd| UtcDateTime::from_julian(jd).with_dst_offset_plain(tz_offset));
 
         // update rise set
         (UpdateCmd::SetRiseSet {
@@ -270,7 +270,7 @@ impl UpdateCmd {
 
     /// push new local datetime, last NTP status to UI
     pub async fn notify_new_datetime(datetime: &OffsetDateTime, last_ntp_status: NtpStatus) {
-        let datetime = datetime.to_dst_offset(None);
+        let datetime = datetime.with_dst_offset(&time::UtcOffset::UTC);
         (UpdateCmd::SetDatetime {
             datetime,
             last_ntp_status,
@@ -279,7 +279,7 @@ impl UpdateCmd {
         .await;
     }
 
-    pub async fn update_season_start(datetime: &OffsetDateTime, lat: f64) {
+    pub async fn notify_season_start(datetime: &OffsetDateTime, lat: f64) {
         let year = datetime.year() as f64;
         let tz_days_offset = datetime.offset().whole_seconds() as f64 / SECONDS_PER_DAY;
 

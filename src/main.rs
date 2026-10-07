@@ -104,7 +104,11 @@ async fn main(spawner: Spawner) -> ! {
                 moon.update_astron(&now, lat, lon);
 
                 // update seasons start time
-                ui::UpdateCmd::update_season_start(&now, lat).await;
+                ui::UpdateCmd::notify_season_start(&now, lat).await;
+
+                // notify UI update
+                ui::UpdateCmd::notify_new_solar_state(&now, &sun).await;
+                ui::UpdateCmd::notify_new_lunar_state(&now, &moon).await;
 
                 first_run = false;
             }
@@ -120,6 +124,10 @@ async fn main(spawner: Spawner) -> ! {
                 embassy_futures::select::Either::First(_) => {
                     sun.update_astron(&now, lat, lon);
                     moon.update_astron(&now, lat, lon);
+
+                    // notify UI update
+                    ui::UpdateCmd::notify_new_solar_state(&now, &sun).await;
+                    ui::UpdateCmd::notify_new_lunar_state(&now, &moon).await;
                 }
                 // frequently update sun and moon position
                 embassy_futures::select::Either::Second(_) => {
@@ -134,10 +142,6 @@ async fn main(spawner: Spawner) -> ! {
             // update rise/set and current position
             ui::UpdateCmd::notify_new_object_state(&now, &sun).await;
             ui::UpdateCmd::notify_new_object_state(&now, &moon).await;
-
-            // update sun and moon states
-            ui::UpdateCmd::notify_new_solar_state(&now, &sun).await;
-            ui::UpdateCmd::notifiy_new_lunar_state(&now, &moon).await;
 
             // flush display
             ui::UpdateCmd::redraw().await;

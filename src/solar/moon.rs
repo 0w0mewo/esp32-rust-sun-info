@@ -75,8 +75,8 @@ pub struct Moon {
 }
 
 impl PlanetUpdater for Moon {
-    fn update_pos(&mut self, utc_now: &UtcDateTime, lat: f64, lon: f64) {
-        self.pos = SolarObject::Moon.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
+    fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64) {
+        self.pos = SolarObject::Moon.get_pos(now.to_julian(), now.delta_t(), lat, lon);
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {

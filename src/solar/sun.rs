@@ -59,8 +59,8 @@ pub struct Sun {
 }
 
 impl PlanetUpdater for Sun {
-    fn update_pos(&mut self, utc_now: &UtcDateTime, lat: f64, lon: f64) {
-        self.pos = SolarObject::Sun.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
+    fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64) {
+        self.pos = SolarObject::Sun.get_pos(now.to_julian(), now.delta_t(), lat, lon);
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
@@ -135,7 +135,7 @@ impl Sun {
 
     /// daytime progress, `None` if it's after sunset
     pub fn day_progress(&self, now: &OffsetDateTime) -> DayProgress {
-        let now = now.to_utc().to_julian();
+        let now = now.to_julian();
 
         // convert rise/set time in seconds since midnight local time, the `EventInfo` assume the event time is in UTC
         let rise = self.rise.as_ref().map(|ev| ev.jd).unwrap_or_default();

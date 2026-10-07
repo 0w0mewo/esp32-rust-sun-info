@@ -114,10 +114,12 @@ impl AstronDatetimeExt for Date {
 }
 
 impl AstronDatetimeExt for OffsetDateTime {
+    /// convert from JD, the resulting datetime is in UTC
     fn from_julian(jd: f64) -> Self {
         UtcDateTime::from_julian(jd).to_offset(UtcOffset::UTC)
     }
 
+    /// convert to JD in UTC
     fn to_julian(&self) -> f64 {
         self.to_utc().to_julian()
     }
@@ -175,15 +177,17 @@ pub trait UtOffsetExt {
     /// if the current datetime inside DST range
     fn is_dst(&self) -> bool;
     /// convert to `OffsetDateTime` with DST and standard time zone offset applied
-    fn to_dst_offset(&self, tz_offset: Option<UtcOffset>) -> OffsetDateTime;
+    fn with_dst_offset(&self, tz_offset: &UtcOffset) -> OffsetDateTime;
+
     /// add 1 hour if the current datetime is inside DST range, 0 if not
     fn dst_offset_duration(&self) -> Duration {
         let hr = if self.is_dst() { 1 } else { 0 };
         Duration::hours(hr)
     }
+
     /// convert to `PlainDatetime` with DST and standard time zone offset applied
-    fn to_dst_offset_plain(&self, tz_offset: Option<UtcOffset>) -> PlainDateTime {
-        let offset_datetime = self.to_dst_offset(tz_offset);
+    fn with_dst_offset_plain(&self, tz_offset: &UtcOffset) -> PlainDateTime {
+        let offset_datetime = self.with_dst_offset(tz_offset);
         PlainDateTime::new(offset_datetime.date(), offset_datetime.time())
     }
 }
@@ -193,7 +197,9 @@ impl UtOffsetExt for OffsetDateTime {
         self.to_utc().is_dst()
     }
 
-    fn to_dst_offset(&self, _tz_offset: Option<UtcOffset>) -> OffsetDateTime {
+    /// apply DST offset to offsetted datetime, the parameter, `tz_offset` is unused,
+    /// use `time::UtcOffset::UTC` as placeholder
+    fn with_dst_offset(&self, _tz_offset: &UtcOffset) -> OffsetDateTime {
         self.saturating_add(self.dst_offset_duration())
     }
 }
@@ -220,13 +226,9 @@ impl UtOffsetExt for UtcDateTime {
         })
     }
 
-    fn to_dst_offset(&self, tz_offset: Option<UtcOffset>) -> OffsetDateTime {
-        if let Some(tz_offset) = tz_offset {
-            self.to_offset(tz_offset)
-                .saturating_add(self.dst_offset_duration())
-        } else {
-            self.to_offset(UtcOffset::UTC)
-        }
+    fn with_dst_offset(&self, tz_offset: &UtcOffset) -> OffsetDateTime {
+        self.to_offset(*tz_offset)
+            .saturating_add(self.dst_offset_duration())
     }
 }
 
@@ -235,8 +237,8 @@ impl UtOffsetExt for PlainDateTime {
         self.as_utc().is_dst()
     }
 
-    fn to_dst_offset(&self, tz_offset: Option<UtcOffset>) -> OffsetDateTime {
-        self.as_utc().to_dst_offset(tz_offset)
+    fn with_dst_offset(&self, tz_offset: &UtcOffset) -> OffsetDateTime {
+        self.as_utc().with_dst_offset(tz_offset)
     }
 }
 

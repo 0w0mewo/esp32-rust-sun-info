@@ -126,7 +126,7 @@ impl SolarObject {
         let lon_rad = lon.to_radians();
 
         // local midnight in UTC
-        let midnight = { now.replace_time(time::Time::MIDNIGHT).to_utc() };
+        let midnight = now.replace_time(time::Time::MIDNIGHT).to_utc();
 
         let jd0 = midnight.to_julian();
         let dt_days = midnight.delta_t(); // delta T
