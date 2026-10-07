@@ -1,6 +1,6 @@
 use core::f64::consts::TAU;
-use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, fmod, sin, tan};
+use time::{OffsetDateTime, UtcDateTime};
 
 use crate::{
     HorizontalCoordinate,
@@ -75,13 +75,13 @@ pub struct Moon {
 }
 
 impl PlanetUpdater for Moon {
-    fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
+    fn update_pos(&mut self, utc_now: &UtcDateTime, lat: f64, lon: f64) {
         self.pos = SolarObject::Moon.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
     }
 
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64) {
         // upcoming moon events in UTC
-        let utc_now = &now.utc;
+        let utc_now = &now.to_utc();
         let jd_utc = utc_now.to_julian();
         self.new_moon = upcoming_moon_phase_jd(utc_now, Phase::New);
         self.full_moon = upcoming_moon_phase_jd(utc_now, Phase::Full);
@@ -156,14 +156,14 @@ impl Moon {
 
     #[inline]
     /// upcoming new moon in UTC time
-    pub fn upcoming_new_moon(&self) -> DateTime {
-        DateTime::from_julian(self.new_moon)
+    pub fn upcoming_new_moon(&self) -> UtcDateTime {
+        UtcDateTime::from_julian(self.new_moon)
     }
 
     #[inline]
     /// upcoming full moon in UTC time
-    pub fn upcoming_full_moon(&self) -> DateTime {
-        DateTime::from_julian(self.full_moon)
+    pub fn upcoming_full_moon(&self) -> UtcDateTime {
+        UtcDateTime::from_julian(self.full_moon)
     }
 
     // lunar age and illumination
@@ -353,7 +353,7 @@ fn moon_phase_jd(decimal_year: f64, phase: Phase) -> f64 {
     jde + c + w + c_additional - delta_t_2000(decimal_year)
 }
 
-fn upcoming_moon_phase_jd(now: &DateTime, phase: Phase) -> f64 {
+fn upcoming_moon_phase_jd(now: &UtcDateTime, phase: Phase) -> f64 {
     let jd_now_utc = now.to_julian();
     let mut jd_phase_utc = moon_phase_jd(now.decimal_year(), phase);
     if jd_now_utc > jd_phase_utc {

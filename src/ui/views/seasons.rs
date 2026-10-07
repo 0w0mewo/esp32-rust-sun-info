@@ -4,7 +4,7 @@ use crate::ui::{
     UpdateCmd,
     views::{DatetimeStatus, UpdateableFromCmd},
 };
-use fasttime::DateTime;
+use time::PlainDateTime;
 
 #[derive(Default)]
 pub struct State {
@@ -42,24 +42,16 @@ impl UpdateableFromCmd for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let spring = DateTime::from_julian(self.spring_jd);
-        let summer = DateTime::from_julian(self.summer_jd);
-        let autumn = DateTime::from_julian(self.autumn_jd);
-        let winter = DateTime::from_julian(self.winter_jd);
+        let spring = PlainDateTime::from_julian(self.spring_jd);
+        let summer = PlainDateTime::from_julian(self.summer_jd);
+        let autumn = PlainDateTime::from_julian(self.autumn_jd);
+        let winter = PlainDateTime::from_julian(self.winter_jd);
 
         // apply extra DST offset if any
-        let spring = spring
-            .add_duration(fasttime::Duration::seconds(spring.dst_offset_seconds()))
-            .unwrap();
-        let summer = summer
-            .add_duration(fasttime::Duration::seconds(summer.dst_offset_seconds()))
-            .unwrap();
-        let autumn = autumn
-            .add_duration(fasttime::Duration::seconds(autumn.dst_offset_seconds()))
-            .unwrap();
-        let winter = winter
-            .add_duration(fasttime::Duration::seconds(winter.dst_offset_seconds()))
-            .unwrap();
+        let spring = spring.saturating_add(spring.dst_offset_duration());
+        let summer = summer.saturating_add(summer.dst_offset_duration());
+        let autumn = autumn.saturating_add(autumn.dst_offset_duration());
+        let winter = winter.saturating_add(winter.dst_offset_duration());
 
         write!(
             f,
@@ -70,18 +62,18 @@ Autumn   {} {:02}:{:02}
 Winter   {} {:02}:{:02}
 "#,
             self.datetime,
-            spring.date,
-            spring.time.hour,
-            spring.time.minute,
-            summer.date,
-            summer.time.hour,
-            summer.time.minute,
-            autumn.date,
-            autumn.time.hour,
-            autumn.time.minute,
-            winter.date,
-            winter.time.hour,
-            winter.time.minute
+            spring.date(),
+            spring.hour(),
+            spring.minute(),
+            summer.date(),
+            summer.hour(),
+            summer.minute(),
+            autumn.date(),
+            autumn.hour(),
+            autumn.minute(),
+            winter.date(),
+            winter.hour(),
+            winter.minute(),
         )
     }
 }

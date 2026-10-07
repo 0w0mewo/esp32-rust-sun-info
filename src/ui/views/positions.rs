@@ -74,8 +74,8 @@ impl UpdateableFromCmd for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let utc_time = &self.datetime.datetime.utc;
-        let local_time = self.datetime.datetime.to_local().unwrap();
+        let local = &self.datetime.datetime;
+        let utc = local.to_utc();
         write!(
             f,
             r#"JD {:.2}
@@ -88,13 +88,13 @@ Moon pos.
  Az  {:>6.2}{DEG_SYM} 
  Alt {:>6.2}{DEG_SYM}
   "#,
-            utc_time.to_julian(),
-            utc_time.time.hour,
-            utc_time.time.minute,
-            utc_time.time.second,
-            local_time.time.hour,
-            local_time.time.minute,
-            local_time.time.second,
+            utc.to_julian(),
+            utc.hour(),
+            utc.minute(),
+            utc.second(),
+            local.hour(),
+            local.minute(),
+            local.second(),
             self.sun_pos.azimuth,
             self.sun_pos.altitude,
             self.moon_pos.azimuth,

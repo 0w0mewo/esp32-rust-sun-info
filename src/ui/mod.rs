@@ -3,11 +3,11 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel;
 use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::{pixelcolor, prelude::*};
-use fasttime::{Date, DateTime, OffsetDateTime, Time};
 use ssd1306::{Ssd1306Async, prelude::*};
+use time::{Date, OffsetDateTime, PlainDateTime, Time, UtcDateTime};
 
 use crate::board::I2cBusDeviceAsync;
-use crate::datetime::{AstronDatetimeExt, UNIX_EPOCH, UtOffsetExt};
+use crate::datetime::{AstronDatetimeExt, UtOffsetExt};
 use crate::events::NtpStatus;
 use crate::solar::moon::{self, Moon};
 use crate::solar::sun::{
@@ -158,8 +158,8 @@ pub enum UpdateCmd {
         sundusk_at: Time,
     },
     SetRiseSet {
-        rise_at: Option<DateTime>,
-        set_at: Option<DateTime>,
+        rise_at: Option<PlainDateTime>,
+        set_at: Option<PlainDateTime>,
         rise_azim: f64,
         set_azim: f64,
         obj: SolarObject,
@@ -198,9 +198,9 @@ impl UpdateCmd {
         let next_full_moon_utc = moon.upcoming_full_moon();
 
         // apply timezone standard offset and DST
-        let tz_offset = Some(&datetime.offset);
-        let next_new_moon = next_new_moon_utc.add_ut_offset(tz_offset).date;
-        let next_full_moon = next_full_moon_utc.add_ut_offset(tz_offset).date;
+        let tz_offset = Some(datetime.offset());
+        let next_new_moon = next_new_moon_utc.to_dst_offset(tz_offset).date();
+        let next_full_moon = next_full_moon_utc.to_dst_offset(tz_offset).date();
 
         // update moon info view
         (UpdateCmd::SetLunar {
@@ -216,13 +216,13 @@ impl UpdateCmd {
     /// push new datetime, sun and moon state to UI
     pub async fn notify_new_solar_state(datetime: &OffsetDateTime, sun: &Sun) {
         // in UTC
-        let sundusk_at = sun.dusk_at().unwrap_or(UNIX_EPOCH);
-        let sundawn_at = sun.dawn_at().unwrap_or(UNIX_EPOCH);
+        let sundusk_at = sun.dusk_at().unwrap_or(UtcDateTime::UNIX_EPOCH);
+        let sundawn_at = sun.dawn_at().unwrap_or(UtcDateTime::UNIX_EPOCH);
 
         // apply timezone standard offset and DST
-        let tz_offset = Some(&datetime.offset);
-        let sundusk_at = sundusk_at.add_ut_offset(tz_offset).time;
-        let sundawn_at = sundawn_at.add_ut_offset(tz_offset).time;
+        let tz_offset = Some(datetime.offset());
+        let sundusk_at = sundusk_at.to_dst_offset(tz_offset).time();
+        let sundawn_at = sundawn_at.to_dst_offset(tz_offset).time();
 
         // update sun info view
         (UpdateCmd::SetSolar {
@@ -240,13 +240,13 @@ impl UpdateCmd {
         planet: &PLANET,
     ) {
         // convert rise/set to local time
-        let tz_offset = Some(&datetime.offset);
+        let tz_offset = Some(datetime.offset());
         let rise_at = planet
             .rise_at()
-            .map(|jd| DateTime::from_julian(jd).add_ut_offset(tz_offset));
+            .map(|jd| UtcDateTime::from_julian(jd).to_dst_offset_plain(tz_offset));
         let set_at = planet
             .set_at()
-            .map(|jd| DateTime::from_julian(jd).add_ut_offset(tz_offset));
+            .map(|jd| UtcDateTime::from_julian(jd).to_dst_offset_plain(tz_offset));
 
         // update rise set
         (UpdateCmd::SetRiseSet {
@@ -270,7 +270,7 @@ impl UpdateCmd {
 
     /// push new local datetime, last NTP status to UI
     pub async fn notify_new_datetime(datetime: &OffsetDateTime, last_ntp_status: NtpStatus) {
-        let datetime = datetime.add_ut_offset(None);
+        let datetime = datetime.to_dst_offset(None);
         (UpdateCmd::SetDatetime {
             datetime,
             last_ntp_status,
@@ -280,8 +280,8 @@ impl UpdateCmd {
     }
 
     pub async fn update_season_start(datetime: &OffsetDateTime, lat: f64) {
-        let year = datetime.utc.date.year as f64;
-        let tz_days_offset = datetime.offset.as_seconds() as f64 / SECONDS_PER_DAY;
+        let year = datetime.year() as f64;
+        let tz_days_offset = datetime.offset().whole_seconds() as f64 / SECONDS_PER_DAY;
 
         // seasons starting in local datetime without DST encounted
         let local_seasons = if lat >= 0.0 {

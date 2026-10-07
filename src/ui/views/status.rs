@@ -57,7 +57,7 @@ impl core::fmt::Display for State {
         if !self.booted {
             write!(f, "Starting up...")
         } else {
-            let utc_now = &self.datetime.datetime.utc;
+            let utc_now = &self.datetime.datetime.to_utc();
             let uptime = Instant::now().as_secs();
             write!(
                 f,
@@ -69,10 +69,10 @@ IPv4
   {}
 NTP   [{}]
 "#,
-                utc_now.date,
-                utc_now.time.hour,
-                utc_now.time.minute,
-                utc_now.time.second,
+                utc_now.date(),
+                utc_now.hour(),
+                utc_now.minute(),
+                utc_now.second(),
                 readable_uptime(uptime),
                 self.connected_ap,
                 self.ip_addr,

@@ -1,11 +1,10 @@
 use crate::{
-    datetime::DateExt,
     events::NtpStatus,
     ui::{UpdateCmd, UpdateableFromCmd, components::CommonStatusTexts},
 };
 use alloc::format;
 use embedded_graphics::{pixelcolor, prelude::*};
-use fasttime::{DateTime, OffsetDateTime, UtcOffset};
+use time::OffsetDateTime;
 
 mod moon_info;
 mod positions;
@@ -32,23 +31,23 @@ impl Default for DatetimeStatus {
     fn default() -> Self {
         Self {
             last_ntp_status: Default::default(),
-            datetime: OffsetDateTime::from_utc(
-                DateTime::default(),
-                UtcOffset::from_seconds(0).unwrap(),
-            ),
+            datetime: OffsetDateTime::UNIX_EPOCH,
         }
     }
 }
 
 impl core::fmt::Display for DatetimeStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let local_now = self.datetime.to_local().unwrap();
-        let utc_now = &self.datetime.utc;
+        let local_now = &self.datetime;
+        let utc_now = local_now.to_utc();
 
         let local_time_line = if let NtpStatus::OK = self.last_ntp_status {
             format!(
                 "{} {:02}:{:02}:{:02}",
-                local_now.date, local_now.time.hour, local_now.time.minute, local_now.time.second
+                local_now.date(),
+                local_now.hour(),
+                local_now.minute(),
+                local_now.second()
             )
         } else {
             format!("NTP {}", self.last_ntp_status)
@@ -57,7 +56,10 @@ impl core::fmt::Display for DatetimeStatus {
         let utc_time_line = if let NtpStatus::OK = self.last_ntp_status {
             format!(
                 "{} {:02}:{:02}:{:02}",
-                utc_now.date, utc_now.time.hour, utc_now.time.minute, utc_now.time.second
+                utc_now.date(),
+                utc_now.hour(),
+                utc_now.minute(),
+                utc_now.second()
             )
         } else {
             format!("NTP {}", self.last_ntp_status)

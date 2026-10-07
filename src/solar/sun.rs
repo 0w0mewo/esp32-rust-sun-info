@@ -1,6 +1,6 @@
-use fasttime::{DateTime, OffsetDateTime};
 use libm::{asin, atan2, cos, floor, sin, sincos};
 use smart_leds::{RGB, RGB8};
+use time::{OffsetDateTime, UtcDateTime};
 
 use crate::{
     DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate,
@@ -59,7 +59,7 @@ pub struct Sun {
 }
 
 impl PlanetUpdater for Sun {
-    fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64) {
+    fn update_pos(&mut self, utc_now: &UtcDateTime, lat: f64, lon: f64) {
         self.pos = SolarObject::Sun.get_pos(utc_now.to_julian(), utc_now.delta_t(), lat, lon);
     }
 
@@ -119,23 +119,23 @@ impl PlanetUpdater for Sun {
 impl Sun {
     /// sun dawn at UTC
     #[inline]
-    pub fn dawn_at(&self) -> Option<DateTime> {
+    pub fn dawn_at(&self) -> Option<UtcDateTime> {
         self.dawn
             .as_ref()
-            .map(|event_info| DateTime::from_julian(event_info.jd))
+            .map(|event_info| UtcDateTime::from_julian(event_info.jd))
     }
 
     /// sun dusk at UTC
     #[inline]
-    pub fn dusk_at(&self) -> Option<DateTime> {
+    pub fn dusk_at(&self) -> Option<UtcDateTime> {
         self.dusk
             .as_ref()
-            .map(|event_info| DateTime::from_julian(event_info.jd))
+            .map(|event_info| UtcDateTime::from_julian(event_info.jd))
     }
 
     /// daytime progress, `None` if it's after sunset
     pub fn day_progress(&self, now: &OffsetDateTime) -> DayProgress {
-        let now = now.utc.to_julian();
+        let now = now.to_utc().to_julian();
 
         // convert rise/set time in seconds since midnight local time, the `EventInfo` assume the event time is in UTC
         let rise = self.rise.as_ref().map(|ev| ev.jd).unwrap_or_default();

@@ -1,9 +1,9 @@
-use fasttime::{DateTime, Duration, OffsetDateTime};
 use libm::{asin, cos, floor, fmod, round, sin};
+use time::{Duration, OffsetDateTime, Time, UtcDateTime};
 
 use crate::{
     HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, MIDNIGHT, NOON, UNIX_EPOCH, sidereal_time},
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, sidereal_time},
     sine_altitude,
     solar::{moon::moon_coord, sun::sun_coord},
 };
@@ -98,11 +98,8 @@ impl SolarObject {
     ) -> (Option<EventInfo>, Option<EventInfo>) {
         // the datetime should shift 12 hours forward if it's local afternoon in order to obtain
         // the rise/set time at the center of midnight of next day rather than the midnight of today
-        let local_now = now.to_local().unwrap();
-        let start_at = if local_now.time >= NOON {
-            &(now
-                .add_duration(Duration::seconds(3600 * 12))
-                .unwrap_or(OffsetDateTime::from_utc(UNIX_EPOCH, now.offset)))
+        let start_at = if now.time() >= Time::from_hms(12, 0, 0).unwrap() {
+            &now.saturating_add(Duration::hours(12))
         } else {
             now
         };
@@ -129,12 +126,7 @@ impl SolarObject {
         let lon_rad = lon.to_radians();
 
         // local midnight in UTC
-        let midnight = {
-            let now_local = now.to_local().unwrap_or(UNIX_EPOCH);
-            OffsetDateTime::from_local(now_local.date, MIDNIGHT, now.offset)
-                .unwrap()
-                .utc
-        };
+        let midnight = { now.replace_time(time::Time::MIDNIGHT).to_utc() };
 
         let jd0 = midnight.to_julian();
         let dt_days = midnight.delta_t(); // delta T
@@ -224,7 +216,7 @@ impl SolarObject {
 
 pub trait PlanetUpdater {
     /// update horizontal position
-    fn update_pos(&mut self, utc_now: &DateTime, lat: f64, lon: f64);
+    fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64);
     /// update atronomical events, such as rise time, set time, etc
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
     /// get rise azimuth
