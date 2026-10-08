@@ -1,10 +1,11 @@
 use crate::{
+    datetime::UtOffsetExt,
     events::NtpStatus,
     ui::{UpdateCmd, UpdateableFromCmd, components::CommonStatusTexts},
 };
 use alloc::format;
 use embedded_graphics::{pixelcolor, prelude::*};
-use time::OffsetDateTime;
+use time::{OffsetDateTime, UtcDateTime};
 
 mod moon_info;
 mod positions;
@@ -25,6 +26,14 @@ impl DatetimeStatus {
         self.last_ntp_status = last_ntp_status;
         self.datetime = datetime;
     }
+
+    /// get UTC datetime, assume the offset datetime has DST offset
+    pub fn utc_assume_dst(&self) -> UtcDateTime {
+        let local_with_dst = &self.datetime;
+        local_with_dst
+            .to_utc()
+            .saturating_sub(local_with_dst.dst_offset_duration())
+    }
 }
 
 impl Default for DatetimeStatus {
@@ -38,16 +47,16 @@ impl Default for DatetimeStatus {
 
 impl core::fmt::Display for DatetimeStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let local_now = &self.datetime;
-        let utc_now = local_now.to_utc();
+        let local_now_with_dst = &self.datetime;
+        let utc_now = self.utc_assume_dst();
 
         let local_time_line = if let NtpStatus::OK = self.last_ntp_status {
             format!(
                 "{} {:02}:{:02}:{:02}",
-                local_now.date(),
-                local_now.hour(),
-                local_now.minute(),
-                local_now.second()
+                local_now_with_dst.date(),
+                local_now_with_dst.hour(),
+                local_now_with_dst.minute(),
+                local_now_with_dst.second()
             )
         } else {
             format!("NTP {}", self.last_ntp_status)

@@ -83,14 +83,16 @@ async fn main(spawner: Spawner) -> ! {
 
     loop {
         let rtc_now = board.rtc.current_time_us();
-        if let Ok(now) = OffsetDateTime::from_unix_timestamp(
-            rtc_now.div_euclid(MICROSECS_PER_SEC) as i64
+
+        // local time without DST offset
+        if let Ok(local_now_std) = OffsetDateTime::from_unix_timestamp(
+            rtc_now.div_euclid(MICROSECS_PER_SEC) as i64,
         )
         .map(|now: OffsetDateTime| {
             // RTC time is in UTC, timezone offset must be applied
             now.to_offset(tz_offset_std)
         }) {
-            let utc_now = now.to_utc();
+            let utc_now = local_now_std.to_utc();
 
             if let Some(new_ntp_status) = NtpStatus::last() {
                 last_ntp_status = new_ntp_status;
@@ -100,15 +102,15 @@ async fn main(spawner: Spawner) -> ! {
                 && first_run
             {
                 // make sure the moon and sun are updated at the first NTP synced
-                sun.update_astron(&now, lat, lon);
-                moon.update_astron(&now, lat, lon);
+                sun.update_astron(&local_now_std, lat, lon);
+                moon.update_astron(&local_now_std, lat, lon);
 
                 // update seasons start time
-                ui::UpdateCmd::notify_season_start(&now, lat).await;
+                ui::UpdateCmd::notify_season_start(&local_now_std, lat).await;
 
                 // notify UI update
-                ui::UpdateCmd::notify_new_solar_state(&now, &sun).await;
-                ui::UpdateCmd::notify_new_lunar_state(&now, &moon).await;
+                ui::UpdateCmd::notify_new_solar_state(&local_now_std, &sun).await;
+                ui::UpdateCmd::notify_new_lunar_state(&local_now_std, &moon).await;
 
                 first_run = false;
             }
@@ -122,12 +124,12 @@ async fn main(spawner: Spawner) -> ! {
             {
                 // infrequently update sun and moon atronomical events
                 embassy_futures::select::Either::First(_) => {
-                    sun.update_astron(&now, lat, lon);
-                    moon.update_astron(&now, lat, lon);
+                    sun.update_astron(&local_now_std, lat, lon);
+                    moon.update_astron(&local_now_std, lat, lon);
 
                     // notify UI update
-                    ui::UpdateCmd::notify_new_solar_state(&now, &sun).await;
-                    ui::UpdateCmd::notify_new_lunar_state(&now, &moon).await;
+                    ui::UpdateCmd::notify_new_solar_state(&local_now_std, &sun).await;
+                    ui::UpdateCmd::notify_new_lunar_state(&local_now_std, &moon).await;
                 }
                 // frequently update sun and moon position
                 embassy_futures::select::Either::Second(_) => {
@@ -137,18 +139,18 @@ async fn main(spawner: Spawner) -> ! {
             }
 
             // update datetime status bar
-            ui::UpdateCmd::notify_new_datetime(&now, last_ntp_status).await;
+            ui::UpdateCmd::notify_new_datetime(&local_now_std, last_ntp_status).await;
 
             // update rise/set and current position
-            ui::UpdateCmd::notify_new_object_state(&now, &sun).await;
-            ui::UpdateCmd::notify_new_object_state(&now, &moon).await;
+            ui::UpdateCmd::notify_new_object_state(&local_now_std, &sun).await;
+            ui::UpdateCmd::notify_new_object_state(&local_now_std, &moon).await;
 
             // flush display
             ui::UpdateCmd::redraw().await;
 
             // RGB LED color as sun color
             // LED brightness as day progress
-            let day_prog = sun.day_progress(&now);
+            let day_prog = sun.day_progress(&local_now_std);
             let brigtness = day_prog.to_pwm_duty_cycle_percent().max(15);
             let sun_color = sun.color_at(day_prog);
             board.set_rgb_led_color(sun_color, brigtness).await;

@@ -75,7 +75,7 @@ impl UpdateableFromCmd for State {
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let local = &self.datetime.datetime;
-        let utc = local.to_utc();
+        let utc = self.datetime.utc_assume_dst();
         write!(
             f,
             r#"JD {:.2}
