@@ -4,7 +4,7 @@ use embassy_sync::channel;
 use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::{pixelcolor, prelude::*};
 use ssd1306::{Ssd1306Async, prelude::*};
-use time::{Date, OffsetDateTime, PlainDateTime, Time, UtcDateTime};
+use time::{OffsetDateTime, PlainDateTime, Time, UtcDateTime};
 
 use crate::board::I2cBusDeviceAsync;
 use crate::datetime::{AstronDatetimeExt, UtOffsetExt};
@@ -149,8 +149,8 @@ pub enum UpdateCmd {
     SetLunar {
         lunar_phase: moon::Phase,
         lunar_illumination: f64,
-        next_new_moon: Date,
-        next_full_moon: Date,
+        next_new_moon: PlainDateTime,
+        next_full_moon: PlainDateTime,
     },
     SetSolar {
         day_progress: sun::DayProgress,
@@ -199,8 +199,8 @@ impl UpdateCmd {
 
         // apply timezone standard offset and DST
         let tz_offset = &datetime.offset();
-        let next_new_moon = next_new_moon_utc.with_dst_offset(tz_offset).date();
-        let next_full_moon = next_full_moon_utc.with_dst_offset(tz_offset).date();
+        let next_new_moon = next_new_moon_utc.with_dst_offset_plain(tz_offset);
+        let next_full_moon = next_full_moon_utc.with_dst_offset_plain(tz_offset);
 
         // update moon info view
         (UpdateCmd::SetLunar {

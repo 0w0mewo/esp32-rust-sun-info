@@ -83,22 +83,22 @@ fn populate_configs() -> std::io::Result<()> {
     let tz = tz::TimeZone::from_posix_tz(tz_str).unwrap_or(tz::TimeZone::utc());
 
     // find DST rules of the timezone
-    let mut dst_transit_table: Vec<DstRule> = Vec::new();
     let dst_transit_table_start_year = time::UtcDateTime::now().year();
-    for yr in dst_transit_table_start_year..=2050 {
-        if let Some(tz_dst_rule) = DstRule::find_dst_rules(yr, &tz) {
-            dst_transit_table.push(tz_dst_rule);
-        }
-    }
+    let dst_transit_table: Vec<DstRule> = (dst_transit_table_start_year..=2050)
+        .filter_map(|yr| DstRule::find_dst_rules(yr, &tz))
+        .collect();
     let dst_transit_table = DstRules(dst_transit_table);
 
     // standard timezone offset in seconds without DST shifts
-    let tz_local_time_type = tz.find_current_local_time_type().unwrap();
-    let tz_offset_secs = if tz_local_time_type.is_dst() {
-        tz_local_time_type.ut_offset() - 3600 // push back 1 hour to the standard timezone offset due to DST
-    } else {
-        tz_local_time_type.ut_offset()
-    };
+    let tz_offset_secs = tz
+        .find_current_local_time_type()
+        .map_or(0, |tz_local_time_type| {
+            if tz_local_time_type.is_dst() {
+                tz_local_time_type.ut_offset() - 3600 // push back 1 hour to the standard timezone offset due to DST
+            } else {
+                tz_local_time_type.ut_offset()
+            }
+        });
 
     let mut config_rs = std::fs::File::options()
         .write(true)

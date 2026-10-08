@@ -96,10 +96,10 @@ impl SolarObject {
         lon: f64,
         refracted_horizon_rad: f64,
     ) -> (Option<EventInfo>, Option<EventInfo>) {
-        // the datetime should shift 12 hours forward if it's local afternoon in order to obtain
+        // the datetime should shift 12 hours forward if it's local morning in order to obtain
         // the rise/set time at the center of midnight of next day rather than the midnight of today
-        let start_at = if now.time() >= Time::from_hms(12, 0, 0).unwrap() {
-            &now.saturating_add(Duration::hours(12))
+        let start_at = if now.time() >= Time::from_hms(8, 0, 0).unwrap() {
+            &now.saturating_add(Duration::hours(24 - 8))
         } else {
             now
         };
