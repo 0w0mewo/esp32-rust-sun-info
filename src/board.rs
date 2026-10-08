@@ -2,6 +2,7 @@ use core::cell::RefCell;
 
 use alloc::rc::Rc;
 use embassy_embedded_hal::shared_bus;
+use embassy_futures::select::select;
 use embassy_net::StackResources;
 use embassy_sync::blocking_mutex::Mutex as MutexBlocking;
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
@@ -207,38 +208,45 @@ async fn status_led_task(mut led: gpio::Output<'static>) {
 }
 
 #[embassy_executor::task]
-async fn wifi_connection_task(mut controller: wifi::WifiController<'static>) {
-    'connect: loop {
-        match controller.connect_async().await {
-            Ok(info) => {
-                ui::UpdateCmd::SetApStatus(info.ssid.as_str().into())
-                    .notify()
-                    .await;
+async fn wifi_networking_task(
+    mut runner: embassy_net::Runner<'static, wifi::Interface>,
+    mut controller: wifi::WifiController<'static>,
+) {
+    select(
+        // embassy network stack background task
+        runner.run(),
+        // wifi link event handling task
+        async {
+            'connect: loop {
+                match controller.connect_async().await {
+                    Ok(info) => {
+                        ui::UpdateCmd::SetApStatus(info.ssid.as_str().into())
+                            .notify()
+                            .await;
 
-                // wait until we're no longer connected
-                if let Ok(info) = controller.wait_for_disconnect_async().await {
-                    ui::UpdateCmd::SetApStatus(alloc::format!(
-                        "Disconnected from: \n{}",
-                        info.ssid.as_str()
-                    ))
-                    .notify()
-                    .await;
+                        // wait until we're no longer connected
+                        if let Ok(info) = controller.wait_for_disconnect_async().await {
+                            ui::UpdateCmd::SetApStatus(alloc::format!(
+                                "Disconnected from: \n{}",
+                                info.ssid.as_str()
+                            ))
+                            .notify()
+                            .await;
+                        }
+
+                        // this will reconnect after disconnect
+                        continue 'connect;
+                    }
+                    Err(_) => {
+                        ui::UpdateCmd::SetApStatus("Failed".into()).notify().await;
+                    }
                 }
 
-                // this will reconnect after disconnect
-                continue 'connect;
+                Timer::after_secs(5).await
             }
-            Err(_) => {
-                ui::UpdateCmd::SetApStatus("Failed".into()).notify().await;
-            }
-        }
-
-        Timer::after_secs(5).await
-    }
-}
-#[embassy_executor::task]
-async fn network_stack_task(mut runner: embassy_net::Runner<'static, wifi::Interface>) {
-    runner.run().await;
+        },
+    )
+    .await;
 }
 
 #[embassy_executor::task]
@@ -301,8 +309,7 @@ fn wifi_setup(
 
     // handle run wifi link connectivity and network stack task in the background
     // Note: wifi link auto connects to AP immidiately after the task spawned
-    spawner.spawn(wifi_connection_task(wifi_controller).unwrap());
-    spawner.spawn(network_stack_task(net_runner).unwrap());
+    spawner.spawn(wifi_networking_task(net_runner, wifi_controller).unwrap());
 
     net_stack
 }
