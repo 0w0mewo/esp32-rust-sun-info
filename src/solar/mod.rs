@@ -1,5 +1,5 @@
 use libm::{asin, cos, floor, fmod, round, sin};
-use time::{Duration, OffsetDateTime, PlainDateTime, Time, UtcDateTime};
+use time::{PlainDateTime, UtcDateTime};
 
 use crate::{
     HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
@@ -86,47 +86,25 @@ impl SolarObject {
     ///
     /// the event JD is in UT
     #[inline]
-    fn get_rise_set(
+    fn get_rise_set_today(
         &self,
-        now: &OffsetDateTime,
+        local_midnight: &UtcDateTime,
         lat: f64,
         lon: f64,
         refracted_horizon_rad: f64,
     ) -> (Option<EventInfo>, Option<EventInfo>) {
-        self.get_rise_set_with_range(now, 0, 24, lat, lon, refracted_horizon_rad)
-    }
-
-    /// find upcoming rise and set events in Stellarium's planets visibility style, which is
-    /// searching 12 hours forward and 12 hours backward, refers to the local midnight
-    ///
-    /// the event JD is in UT
-    fn get_rise_set_tonight(
-        &self,
-        now: &OffsetDateTime,
-        lat: f64,
-        lon: f64,
-        refracted_horizon_rad: f64,
-    ) -> (Option<EventInfo>, Option<EventInfo>) {
-        // the datetime should shift 12 hours forward if it's local morning in order to obtain
-        // the rise/set time at the center of midnight of next day rather than the midnight of today
-        let start_at = if now.time() >= Time::from_hms(8, 0, 0).unwrap() {
-            &now.saturating_add(Duration::hours(24 - 8))
-        } else {
-            now
-        };
-
-        self.get_rise_set_with_range(start_at, 12, 12, lat, lon, refracted_horizon_rad)
+        self.get_rise_set_with_range(local_midnight, 0, 24, lat, lon, refracted_horizon_rad)
     }
 
     /// find upcoming rise and set events by brute forcing the crossing point,
-    /// it searches `hr_forward` hours forward and `hr_backward` hours backward refers to the local midnight
+    /// it searches `hr_forward` hours forward and `hr_backward` hours backward refers to the `start` time
     ///
     /// the event JD is in UT
     ///
     /// derive from 'Astronomy on the Personal Computer, ch 3'
     fn get_rise_set_with_range(
         &self,
-        now: &OffsetDateTime,
+        start: &UtcDateTime,
         hr_backward: u8,
         hr_forward: u8,
         lat: f64,
@@ -136,11 +114,8 @@ impl SolarObject {
         let lat_rad = lat.to_radians();
         let lon_rad = lon.to_radians();
 
-        // local midnight in UTC
-        let midnight = now.replace_time(Time::MIDNIGHT).to_utc();
-
-        let jd0 = midnight.to_julian();
-        let dt_days = midnight.delta_t(); // delta T
+        let jd0 = start.to_julian();
+        let dt_days = start.delta_t(); // delta T
 
         // refraction
         let refracted_sine_horizon_altitude = sin(refracted_horizon_rad);
@@ -228,8 +203,9 @@ impl SolarObject {
 pub trait PlanetUpdater {
     /// update horizontal position
     fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64);
-    /// update atronomical events, such as rise time, set time, etc
-    fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
+    /// update atronomical events, such as rise time, set time, etc, `local_midnight` should be
+    /// the local midnight in UTC
+    fn update_astron(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64);
     /// get rise event
     fn rise(&self) -> Option<&EventInfo>;
     /// get set event
