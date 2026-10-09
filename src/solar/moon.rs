@@ -81,19 +81,8 @@ impl PlanetUpdater for Moon {
 
     fn update_astron(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64) {
         // upcoming moon events in UTC
-        let jd0_utc = local_midnight.to_julian();
         self.new_moon = upcoming_moon_phase_jd(local_midnight, Phase::New);
         self.full_moon = upcoming_moon_phase_jd(local_midnight, Phase::Full);
-
-        // find the Julian days of last new moon,
-        // push back one lunar period and re-calculate it if the day is in the future.
-        let mut jd_last_new_moon = moon_phase_jd(local_midnight.decimal_year(), Phase::New);
-        if jd_last_new_moon > jd0_utc {
-            jd_last_new_moon = moon_phase_jd(
-                local_midnight.decimal_year_with_offset_days(-LUNAR_ORBIT_PERIOD_AVG),
-                Phase::New,
-            );
-        }
 
         // moonrise and moonset, start searching at local midnight
         let (rise, set) = SolarObject::Moon.get_rise_set_with_range(
@@ -106,11 +95,6 @@ impl PlanetUpdater for Moon {
         );
         self.moonrise = rise;
         self.moonset = set;
-
-        // other stuffs
-        let (age, illumination) = Self::approx_phase(jd0_utc, jd_last_new_moon, self.new_moon);
-        self.illumination = illumination * 100.0;
-        self.phase = Phase::from_age(age);
     }
 
     #[inline]
@@ -155,6 +139,24 @@ impl Moon {
     /// upcoming full moon in UTC time
     pub fn upcoming_full_moon(&self) -> UtcDateTime {
         UtcDateTime::from_julian(self.full_moon)
+    }
+
+    /// update moon phase
+    pub fn update_phase(&mut self, now: &UtcDateTime) {
+        let jd = now.to_julian();
+        // find the Julian days of last new moon,
+        // push back one lunar period and re-calculate it if the day is in the future.
+        let mut jd_last_new_moon = moon_phase_jd(now.decimal_year(), Phase::New);
+        if jd_last_new_moon > jd {
+            jd_last_new_moon = moon_phase_jd(
+                now.decimal_year_with_offset_days(-LUNAR_ORBIT_PERIOD_AVG),
+                Phase::New,
+            );
+        }
+
+        let (age, illumination) = Self::approx_phase(jd, jd_last_new_moon, self.new_moon);
+        self.illumination = illumination * 100.0;
+        self.phase = Phase::from_age(age);
     }
 
     // lunar age and illumination

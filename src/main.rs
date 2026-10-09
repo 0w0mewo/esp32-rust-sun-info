@@ -87,15 +87,29 @@ async fn main(spawner: Spawner) -> ! {
         // local time with DST offset
         let local_now = now.to_offset(now.dst_offset());
 
-        let midnight_in_utc = local_now.replace_time(Time::MIDNIGHT).to_utc();
-        let tonight = if local_now.time() >= Time::from_hms(8, 0, 0).unwrap() {
-            &midnight_in_utc.saturating_add(SignedDuration::hours(24 - 8))
-        } else {
-            &midnight_in_utc
-        };
+        // local midnight in UTC
+        let midnight = local_now.replace_time(Time::MIDNIGHT).to_utc();
+        sun.update_astron(&midnight, lat, lon);
 
-        sun.update_astron(&midnight_in_utc, lat, lon);
-        moon.update_astron(tonight, lat, lon);
+        // local midnight of tonight in UTC
+        let midnight_tonight = {
+            let sunrise_time = sun
+                .rise()
+                .map(|event_info| event_info.event_datetime_local().time())
+                .unwrap_or(Time::from_hms(8, 0, 0).unwrap());
+
+            if local_now.time() >= sunrise_time {
+                // forward to 00:00 of next day
+                &local_now
+                    .saturating_add(SignedDuration::hours(24 - sunrise_time.hour() as i64))
+                    .replace_time(Time::MIDNIGHT)
+                    .to_utc()
+            } else {
+                &midnight
+            }
+        };
+        moon.update_astron(midnight_tonight, lat, lon);
+        moon.update_phase(now);
 
         // notify UI update
         ui::UpdateCmd::notify_new_solar_state(now, sun).await;
