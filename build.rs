@@ -115,13 +115,16 @@ pub const LAT: f64 = {lat};
 pub const LON: f64 = {lon}; // {tz_str}
 
 /// standard time zone offset reference to UTC, without DST rules
-pub const TZ_OFFSET_SECS: i32 = {tz_offset_secs};
+pub const TZ_OFFSET: time::UtcOffset = time::UtcOffset::from_whole_seconds({tz_offset_secs}).unwrap_or(time::UtcOffset::UTC);
+/// time zone offset when DST enabled
+pub const TZ_OFFSET_DST: time::UtcOffset = time::UtcOffset::from_whole_seconds({tz_offset_secs} + 3600).unwrap_or(time::UtcOffset::UTC);
 
 /// DST rules, (start, end)
 pub const TZ_DST_RULES: &[(i64, i64)] = &{dst_transit_table};
 
 /// the year of DST rules index 0
 pub const TZ_DST_RULES_START_YEAR: usize = {dst_transit_table_start_year};
+
 
 "#
     )?;

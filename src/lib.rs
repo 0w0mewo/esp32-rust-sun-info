@@ -1,4 +1,7 @@
 #![no_std]
+#![feature(const_result_trait_fn)]
+#![feature(const_trait_impl)]
+
 pub mod board;
 pub mod config;
 pub mod datetime;

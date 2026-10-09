@@ -4,7 +4,7 @@ use crate::ui::{
     UpdateCmd,
     views::{DatetimeStatus, UpdateableFromCmd},
 };
-use time::PlainDateTime;
+use time::UtcDateTime;
 
 #[derive(Default)]
 pub struct State {
@@ -42,16 +42,11 @@ impl UpdateableFromCmd for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let spring = PlainDateTime::from_julian(self.spring_jd);
-        let summer = PlainDateTime::from_julian(self.summer_jd);
-        let autumn = PlainDateTime::from_julian(self.autumn_jd);
-        let winter = PlainDateTime::from_julian(self.winter_jd);
-
-        // apply extra DST offset if any
-        let spring = spring.saturating_add(spring.dst_offset_duration());
-        let summer = summer.saturating_add(summer.dst_offset_duration());
-        let autumn = autumn.saturating_add(autumn.dst_offset_duration());
-        let winter = winter.saturating_add(winter.dst_offset_duration());
+        // convert to local timezone with DST if any
+        let spring = UtcDateTime::from_julian(self.spring_jd).to_local_with_dst();
+        let summer = UtcDateTime::from_julian(self.summer_jd).to_local_with_dst();
+        let autumn = UtcDateTime::from_julian(self.autumn_jd).to_local_with_dst();
+        let winter = UtcDateTime::from_julian(self.winter_jd).to_local_with_dst();
 
         write!(
             f,

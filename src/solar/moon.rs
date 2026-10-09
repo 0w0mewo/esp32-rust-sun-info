@@ -109,27 +109,13 @@ impl PlanetUpdater for Moon {
     }
 
     #[inline]
-    fn rise_azimuth(&self) -> f64 {
-        self.moonset
-            .as_ref()
-            .map_or(0.0, |event_info| event_info.azimuth)
+    fn rise(&self) -> Option<&EventInfo> {
+        self.moonrise.as_ref()
     }
 
     #[inline]
-    fn set_azimuth(&self) -> f64 {
-        self.moonrise
-            .as_ref()
-            .map_or(0.0, |event_info| event_info.azimuth)
-    }
-
-    #[inline]
-    fn rise_at(&self) -> Option<f64> {
-        self.moonrise.as_ref().map(|ev_info| ev_info.jd)
-    }
-
-    #[inline]
-    fn set_at(&self) -> Option<f64> {
-        self.moonset.as_ref().map(|ev_info| ev_info.jd)
+    fn set(&self) -> Option<&EventInfo> {
+        self.moonset.as_ref()
     }
 
     #[inline]

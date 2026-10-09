@@ -1,9 +1,9 @@
 use libm::{asin, cos, floor, fmod, round, sin};
-use time::{Duration, OffsetDateTime, Time, UtcDateTime};
+use time::{Duration, OffsetDateTime, PlainDateTime, Time, UtcDateTime};
 
 use crate::{
     HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, sidereal_time},
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, UtOffsetExt, sidereal_time},
     sine_altitude,
     solar::{moon::moon_coord, sun::sun_coord},
 };
@@ -38,6 +38,18 @@ impl EventInfo {
     #[inline]
     pub fn seconds_since_midnight(&self) -> u32 {
         self.seconds_since_midnight_local(0.0)
+    }
+
+    /// event datetime in UTC
+    #[inline]
+    pub fn event_datetime_utc(&self) -> UtcDateTime {
+        UtcDateTime::from_julian(self.jd)
+    }
+
+    /// convert event JD to `PlainDatetime` in local timezone
+    #[inline]
+    pub fn event_datetime_local(&self) -> PlainDateTime {
+        self.event_datetime_utc().to_local_with_dst()
     }
 }
 
@@ -88,7 +100,6 @@ impl SolarObject {
     /// searching 12 hours forward and 12 hours backward, refers to the local midnight
     ///
     /// the event JD is in UT
-    #[inline]
     fn get_rise_set_tonight(
         &self,
         now: &OffsetDateTime,
@@ -126,7 +137,7 @@ impl SolarObject {
         let lon_rad = lon.to_radians();
 
         // local midnight in UTC
-        let midnight = now.replace_time(time::Time::MIDNIGHT).to_utc();
+        let midnight = now.replace_time(Time::MIDNIGHT).to_utc();
 
         let jd0 = midnight.to_julian();
         let dt_days = midnight.delta_t(); // delta T
@@ -219,14 +230,10 @@ pub trait PlanetUpdater {
     fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64);
     /// update atronomical events, such as rise time, set time, etc
     fn update_astron(&mut self, now: &OffsetDateTime, lat: f64, lon: f64);
-    /// get rise azimuth
-    fn rise_azimuth(&self) -> f64;
-    /// get set azimuth
-    fn set_azimuth(&self) -> f64;
-    /// rise datetime in UTC, return `None` if no rise event
-    fn rise_at(&self) -> Option<f64>;
-    /// set datetime in UTC, return `None` if no set event
-    fn set_at(&self) -> Option<f64>;
+    /// get rise event
+    fn rise(&self) -> Option<&EventInfo>;
+    /// get set event
+    fn set(&self) -> Option<&EventInfo>;
     /// current altitude and azimuth in degrees
     fn pos(&self) -> HorizontalCoordinate;
     /// who are you?

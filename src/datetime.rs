@@ -1,11 +1,11 @@
 use core::f64::consts::TAU;
 
 use libm::floor;
-use time::{Date, Duration, OffsetDateTime, PlainDateTime, UtcDateTime, UtcOffset};
+use time::{Date, OffsetDateTime, PlainDateTime, SignedDuration, UtcDateTime, UtcOffset};
 
 use crate::{
     HOUR_PER_RAD, SECONDS_PER_DAY,
-    config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR},
+    config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR, TZ_OFFSET, TZ_OFFSET_DST},
 };
 
 pub const J2000: f64 = 2451545.0;
@@ -175,31 +175,31 @@ impl DateExt for OffsetDateTime {
 pub trait UtOffsetExt {
     /// if the current datetime inside DST range
     fn is_dst(&self) -> bool;
-    /// convert to `OffsetDateTime` with DST and standard time zone offset applied
-    fn with_dst_offset(&self, tz_offset: &UtcOffset) -> OffsetDateTime;
+    /// convert to `PlainDateTime` with DST and standard time zone offset applied
+    fn to_local_with_dst(&self) -> PlainDateTime;
 
-    /// add 1 hour if the current datetime is inside DST range, 0 if not
-    fn dst_offset_duration(&self) -> Duration {
-        let hr = if self.is_dst() { 1 } else { 0 };
-        Duration::hours(hr)
-    }
-
-    /// convert to `PlainDatetime` with DST and standard time zone offset applied
-    fn with_dst_offset_plain(&self, tz_offset: &UtcOffset) -> PlainDateTime {
-        let offset_datetime = self.with_dst_offset(tz_offset);
-        PlainDateTime::new(offset_datetime.date(), offset_datetime.time())
+    /// get standard timezone offset with DST
+    fn dst_offset(&self) -> UtcOffset {
+        if self.is_dst() {
+            TZ_OFFSET_DST
+        } else {
+            TZ_OFFSET
+        }
     }
 }
 
 impl UtOffsetExt for OffsetDateTime {
+    #[inline]
     fn is_dst(&self) -> bool {
         self.to_utc().is_dst()
     }
 
-    /// apply DST offset to offsetted datetime, the parameter, `tz_offset` is unused,
-    /// use `time::UtcOffset::UTC` as placeholder
-    fn with_dst_offset(&self, _tz_offset: &UtcOffset) -> OffsetDateTime {
-        self.saturating_add(self.dst_offset_duration())
+    #[inline]
+    fn to_local_with_dst(&self) -> PlainDateTime {
+        let dt = self.saturating_add(SignedDuration::seconds(
+            self.dst_offset().whole_seconds() as i64
+        ));
+        PlainDateTime::new(dt.date(), dt.time())
     }
 }
 
@@ -225,19 +225,12 @@ impl UtOffsetExt for UtcDateTime {
         })
     }
 
-    fn with_dst_offset(&self, tz_offset: &UtcOffset) -> OffsetDateTime {
-        self.to_offset(*tz_offset)
-            .saturating_add(self.dst_offset_duration())
-    }
-}
-
-impl UtOffsetExt for PlainDateTime {
-    fn is_dst(&self) -> bool {
-        self.as_utc().is_dst()
-    }
-
-    fn with_dst_offset(&self, tz_offset: &UtcOffset) -> OffsetDateTime {
-        self.as_utc().with_dst_offset(tz_offset)
+    #[inline]
+    fn to_local_with_dst(&self) -> PlainDateTime {
+        let dt = self.saturating_add(SignedDuration::seconds(
+            self.dst_offset().whole_seconds() as i64
+        ));
+        PlainDateTime::new(dt.date(), dt.time())
     }
 }
 

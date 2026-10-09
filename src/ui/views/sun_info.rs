@@ -1,6 +1,6 @@
 use time::Time;
 
-use crate::datetime::UNIX_EPOCH_PLAIN;
+use crate::datetime::UtOffsetExt;
 use crate::solar::SolarObject;
 use crate::ui::components::DEG_SYM;
 use crate::ui::views::TextBasedView;
@@ -25,35 +25,36 @@ pub struct State {
 
 impl UpdateableFromCmd for State {
     fn update(&mut self, cmd: &UpdateCmd) {
-        match *cmd {
-            UpdateCmd::SetDatetime {
+        match cmd {
+            &UpdateCmd::SetDatetime {
                 datetime,
                 last_ntp_status,
             } => self.datetime.update(datetime, last_ntp_status),
 
             UpdateCmd::SetRiseSet {
-                rise_at,
-                set_at,
-                rise_azim,
-                set_azim,
-                obj,
+                obj: SolarObject::Sun,
+                rise: rise_at,
+                set: set_at,
             } => {
-                if let SolarObject::Sun = obj {
-                    self.sunrise_at = rise_at.unwrap_or(UNIX_EPOCH_PLAIN).time();
-                    self.sunset_at = set_at.unwrap_or(UNIX_EPOCH_PLAIN).time();
-                    self.sunrise_azim = rise_azim;
-                    self.sunset_azim = set_azim;
+                if let Some(rise_at) = rise_at {
+                    self.sunrise_at = rise_at.event_datetime_local().time();
+                    self.sunrise_azim = rise_at.azimuth;
+                }
+
+                if let Some(set) = set_at {
+                    self.sunset_at = set.event_datetime_local().time();
+                    self.sunset_azim = set.azimuth;
                 }
             }
 
-            UpdateCmd::SetSolar {
+            &UpdateCmd::SetSolar {
                 day_progress,
                 sundawn_at,
                 sundusk_at,
             } => {
                 self.day_progress = day_progress;
-                self.dawn_at = sundawn_at;
-                self.dusk_at = sundusk_at;
+                self.dawn_at = sundawn_at.to_local_with_dst().time();
+                self.dusk_at = sundusk_at.to_local_with_dst().time();
             }
             _ => {}
         }
@@ -63,7 +64,7 @@ impl UpdateableFromCmd for State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            day_progress: sun::DayProgress::Night,
+            day_progress: Default::default(),
             sunrise_at: Time::MIDNIGHT,
             sunset_at: Time::MIDNIGHT,
             dawn_at: Time::MIDNIGHT,

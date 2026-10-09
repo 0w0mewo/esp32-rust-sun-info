@@ -12,7 +12,7 @@ use libm::{round, sincos};
 
 use crate::{
     HorizontalCoordinate,
-    datetime::AstronDatetimeExt,
+    datetime::{AstronDatetimeExt, UtOffsetExt},
     solar::SolarObject,
     ui::{
         UpdateCmd,
@@ -35,33 +35,33 @@ pub struct State {
 
 impl UpdateableFromCmd for State {
     fn update(&mut self, cmd: &UpdateCmd) {
-        match *cmd {
-            UpdateCmd::SetDatetime {
+        match cmd {
+            &UpdateCmd::SetDatetime {
                 datetime,
                 last_ntp_status,
             } => self.datetime.update(datetime, last_ntp_status),
 
-            UpdateCmd::SetPosition { pos, obj } => match obj {
+            &UpdateCmd::SetPosition { pos, obj } => match obj {
                 SolarObject::Moon => self.moon_pos = pos,
                 SolarObject::Sun => self.sun_pos = pos,
             },
 
-            UpdateCmd::SetRiseSet {
-                obj,
-                rise_azim,
-                set_azim,
-                ..
-            } => match obj {
-                SolarObject::Moon => {
-                    self.moonrise_azim = rise_azim;
-                    self.moonset_azim = set_azim;
-                }
+            UpdateCmd::SetRiseSet { obj, rise, set, .. } => {
+                let rise_azimuth = rise.as_ref().map_or(0.0, |event_info| event_info.azimuth);
+                let set_azimuth = set.as_ref().map_or(0.0, |event_info| event_info.azimuth);
 
-                SolarObject::Sun => {
-                    self.sunrise_azim = rise_azim;
-                    self.sunset_azim = set_azim;
+                match obj {
+                    SolarObject::Moon => {
+                        self.moonrise_azim = rise_azimuth;
+                        self.moonset_azim = set_azimuth;
+                    }
+
+                    SolarObject::Sun => {
+                        self.sunrise_azim = rise_azimuth;
+                        self.sunset_azim = set_azimuth;
+                    }
                 }
-            },
+            }
 
             UpdateCmd::SwitchView => {
                 self.altitude_view = !self.altitude_view;
@@ -74,8 +74,8 @@ impl UpdateableFromCmd for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let local = &self.datetime.datetime;
-        let utc = self.datetime.utc_assume_dst();
+        let utc = &self.datetime.datetime;
+        let local = utc.to_local_with_dst();
         write!(
             f,
             r#"JD {:.2}

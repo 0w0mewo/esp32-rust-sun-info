@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::format;
 
 use crate::{
-    datetime::UNIX_EPOCH_PLAIN,
+    datetime::{UNIX_EPOCH_PLAIN, UtOffsetExt},
     solar::{SolarObject, moon},
     ui::{
         UpdateCmd,
@@ -26,28 +26,29 @@ pub struct State {
 
 impl UpdateableFromCmd for State {
     fn update(&mut self, cmd: &UpdateCmd) {
-        match *cmd {
-            UpdateCmd::SetDatetime {
+        match cmd {
+            &UpdateCmd::SetDatetime {
                 datetime,
                 last_ntp_status,
             } => self.datetime.update(datetime, last_ntp_status),
 
             UpdateCmd::SetRiseSet {
-                rise_at,
-                set_at,
-                rise_azim,
-                set_azim,
-                obj,
+                obj: SolarObject::Moon,
+                rise,
+                set,
             } => {
-                if let SolarObject::Moon = obj {
-                    self.moonrise = rise_at;
-                    self.moonset = set_at;
-                    self.moonrise_azimuth = rise_azim;
-                    self.moonset_azimuth = set_azim;
+                if let Some(rise) = rise {
+                    self.moonrise.replace(rise.event_datetime_local());
+                    self.moonrise_azimuth = rise.azimuth;
+                }
+
+                if let Some(set) = set {
+                    self.moonset.replace(set.event_datetime_local());
+                    self.moonset_azimuth = set.azimuth;
                 }
             }
 
-            UpdateCmd::SetLunar {
+            &UpdateCmd::SetLunar {
                 lunar_phase,
                 lunar_illumination,
                 next_new_moon,
@@ -55,8 +56,8 @@ impl UpdateableFromCmd for State {
             } => {
                 self.lunar_phase = lunar_phase;
                 self.lunar_illumination = lunar_illumination;
-                self.next_full_moon = next_full_moon;
-                self.next_new_moon = next_new_moon;
+                self.next_full_moon = next_full_moon.to_local_with_dst();
+                self.next_new_moon = next_new_moon.to_local_with_dst();
             }
 
             _ => (),
@@ -74,8 +75,8 @@ impl Default for State {
             next_full_moon: UNIX_EPOCH_PLAIN,
             moonrise: None,
             moonset: None,
-            moonrise_azimuth: 0.0,
             moonset_azimuth: 0.0,
+            moonrise_azimuth: 0.0,
         }
     }
 }
@@ -93,7 +94,7 @@ impl core::fmt::Display for State {
                 rise.minute(),
             )
         });
-        let set = self.moonset.map_or(no_riseset_info.into(), |set| {
+        let set = self.moonset.as_ref().map_or(no_riseset_info.into(), |set| {
             format!(
                 "({:>3.0}{DEG_SYM})  {:02}-{:02} {:02}:{:02}",
                 self.moonset_azimuth,

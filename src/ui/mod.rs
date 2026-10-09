@@ -4,18 +4,17 @@ use embassy_sync::channel;
 use embedded_graphics::primitives::PrimitiveStyle;
 use embedded_graphics::{pixelcolor, prelude::*};
 use ssd1306::{Ssd1306Async, prelude::*};
-use time::{OffsetDateTime, PlainDateTime, Time, UtcDateTime};
+use time::UtcDateTime;
 
 use crate::board::I2cBusDeviceAsync;
-use crate::datetime::{AstronDatetimeExt, UtOffsetExt};
 use crate::events::NtpStatus;
 use crate::solar::moon::{self, Moon};
 use crate::solar::sun::{
     self, NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, Sun,
 };
-use crate::solar::{PlanetUpdater, SolarObject};
+use crate::solar::{EventInfo, PlanetUpdater, SolarObject};
 use crate::ui::views::View;
-use crate::{AppError, HorizontalCoordinate, SECONDS_PER_DAY, SSD1306};
+use crate::{AppError, HorizontalCoordinate, SSD1306};
 
 extern crate alloc;
 use alloc::string::String;
@@ -143,25 +142,23 @@ static UPDATE_CMD_CHAN: channel::Channel<CriticalSectionRawMutex, UpdateCmd, 5> 
 #[derive(Clone)]
 pub enum UpdateCmd {
     SetDatetime {
-        datetime: OffsetDateTime,
+        datetime: UtcDateTime,
         last_ntp_status: NtpStatus,
     },
     SetLunar {
         lunar_phase: moon::Phase,
         lunar_illumination: f64,
-        next_new_moon: PlainDateTime,
-        next_full_moon: PlainDateTime,
+        next_new_moon: UtcDateTime,
+        next_full_moon: UtcDateTime,
     },
     SetSolar {
         day_progress: sun::DayProgress,
-        sundawn_at: Time,
-        sundusk_at: Time,
+        sundawn_at: UtcDateTime,
+        sundusk_at: UtcDateTime,
     },
     SetRiseSet {
-        rise_at: Option<PlainDateTime>,
-        set_at: Option<PlainDateTime>,
-        rise_azim: f64,
-        set_azim: f64,
+        rise: Option<EventInfo>,
+        set: Option<EventInfo>,
         obj: SolarObject,
     },
     SetPosition {
@@ -193,14 +190,11 @@ impl UpdateCmd {
         UpdateCmd::SetApStatus(connected_ap.into()).notify().await
     }
 
-    pub async fn notify_new_lunar_state(datetime: &OffsetDateTime, moon: &Moon) {
-        let next_new_moon_utc = moon.upcoming_new_moon();
-        let next_full_moon_utc = moon.upcoming_full_moon();
-
+    /// notify new lunar state to UI, all datetimes are converted to local
+    pub async fn notify_new_lunar_state(moon: &Moon) {
         // apply timezone standard offset and DST
-        let tz_offset = &datetime.offset();
-        let next_new_moon = next_new_moon_utc.with_dst_offset_plain(tz_offset);
-        let next_full_moon = next_full_moon_utc.with_dst_offset_plain(tz_offset);
+        let next_new_moon = moon.upcoming_new_moon();
+        let next_full_moon = moon.upcoming_full_moon();
 
         // update moon info view
         (UpdateCmd::SetLunar {
@@ -213,16 +207,10 @@ impl UpdateCmd {
         .await;
     }
 
-    /// push new datetime, sun and moon state to UI
-    pub async fn notify_new_solar_state(datetime: &OffsetDateTime, sun: &Sun) {
-        // in UTC
+    /// push new datetime, sun and moon state to UI, all datetimes are in UTC
+    pub async fn notify_new_solar_state(datetime: &UtcDateTime, sun: &Sun) {
         let sundusk_at = sun.dusk_at().unwrap_or(UtcDateTime::UNIX_EPOCH);
         let sundawn_at = sun.dawn_at().unwrap_or(UtcDateTime::UNIX_EPOCH);
-
-        // apply timezone standard offset and DST
-        let tz_offset = &datetime.offset();
-        let sundusk_at = sundusk_at.with_dst_offset(tz_offset).time();
-        let sundawn_at = sundawn_at.with_dst_offset(tz_offset).time();
 
         // update sun info view
         (UpdateCmd::SetSolar {
@@ -235,25 +223,11 @@ impl UpdateCmd {
     }
 
     /// push new rise/set event infos and current position of a planet/sun/moon
-    pub async fn notify_new_object_state<PLANET: PlanetUpdater>(
-        datetime: &OffsetDateTime,
-        planet: &PLANET,
-    ) {
-        // convert rise/set to local time
-        let tz_offset = &datetime.offset();
-        let rise_at = planet
-            .rise_at()
-            .map(|jd| UtcDateTime::from_julian(jd).with_dst_offset_plain(tz_offset));
-        let set_at = planet
-            .set_at()
-            .map(|jd| UtcDateTime::from_julian(jd).with_dst_offset_plain(tz_offset));
-
+    pub async fn notify_new_object_state<PLANET: PlanetUpdater>(planet: &PLANET) {
         // update rise set
         (UpdateCmd::SetRiseSet {
-            rise_at,
-            set_at,
-            rise_azim: planet.rise_azimuth(),
-            set_azim: planet.set_azimuth(),
+            rise: planet.rise().cloned(),
+            set: planet.set().cloned(),
             obj: planet.planet(),
         })
         .notify()
@@ -268,34 +242,30 @@ impl UpdateCmd {
         .await;
     }
 
-    /// push new local datetime, last NTP status to UI
-    pub async fn notify_new_datetime(datetime: &OffsetDateTime, last_ntp_status: NtpStatus) {
-        let datetime = datetime.with_dst_offset(&time::UtcOffset::UTC);
+    /// push new datetime, last NTP status to UI
+    pub async fn notify_new_datetime(datetime: &UtcDateTime, last_ntp_status: NtpStatus) {
         (UpdateCmd::SetDatetime {
-            datetime,
+            datetime: *datetime,
             last_ntp_status,
         })
         .notify()
         .await;
     }
 
-    pub async fn notify_season_start(datetime: &OffsetDateTime, lat: f64) {
-        let year = datetime.year() as f64;
-        let tz_days_offset = datetime.offset().whole_seconds() as f64 / SECONDS_PER_DAY;
-
-        // seasons starting in local datetime without DST encounted
-        let local_seasons = if lat >= 0.0 {
+    pub async fn notify_season_start(year: i32, lat: f64) {
+        // seasons starting in UTC
+        let seasons = if lat >= 0.0 {
             NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT
         } else {
             SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT
         };
-        let local_seasons = local_seasons.map(|s| s.equinox_solstice_jd(year) + tz_days_offset);
+        let seasons_utc = seasons.map(|s| s.equinox_solstice_jd(year as f64));
 
         (UpdateCmd::SetEquinoxSolstice {
-            spring_jd: local_seasons[0],
-            summer_jd: local_seasons[1],
-            autumn_jd: local_seasons[2],
-            winter_jd: local_seasons[3],
+            spring_jd: seasons_utc[0],
+            summer_jd: seasons_utc[1],
+            autumn_jd: seasons_utc[2],
+            winter_jd: seasons_utc[3],
         })
         .notify()
         .await;

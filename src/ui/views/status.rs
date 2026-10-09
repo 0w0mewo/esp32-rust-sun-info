@@ -57,7 +57,7 @@ impl core::fmt::Display for State {
         if !self.booted {
             write!(f, "Starting up...")
         } else {
-            let utc_now = self.datetime.utc_assume_dst();
+            let utc_now = &self.datetime.datetime;
             let uptime = Instant::now().as_secs();
             write!(
                 f,

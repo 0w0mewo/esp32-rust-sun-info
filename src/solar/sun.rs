@@ -79,30 +79,14 @@ impl PlanetUpdater for Sun {
         self.dusk = dusk;
     }
 
-    #[inline]
-    fn rise_azimuth(&self) -> f64 {
-        self.rise
-            .as_ref()
-            .map(|event_info| event_info.azimuth)
-            .unwrap_or_default()
-    }
-
-    #[inline]
-    fn set_azimuth(&self) -> f64 {
-        self.set
-            .as_ref()
-            .map(|event_info| event_info.azimuth)
-            .unwrap_or_default()
-    }
-
     #[inline(always)]
-    fn set_at(&self) -> Option<f64> {
-        self.set.as_ref().map(|ev_info| ev_info.jd)
+    fn set(&self) -> Option<&EventInfo> {
+        self.set.as_ref()
     }
 
     #[inline]
-    fn rise_at(&self) -> Option<f64> {
-        self.rise.as_ref().map(|ev_info| ev_info.jd)
+    fn rise(&self) -> Option<&EventInfo> {
+        self.rise.as_ref()
     }
 
     #[inline]
@@ -134,7 +118,7 @@ impl Sun {
     }
 
     /// daytime progress, `None` if it's after sunset
-    pub fn day_progress(&self, now: &OffsetDateTime) -> DayProgress {
+    pub fn day_progress(&self, now: &UtcDateTime) -> DayProgress {
         let now = now.to_julian();
 
         // convert rise/set time in seconds since midnight local time, the `EventInfo` assume the event time is in UTC

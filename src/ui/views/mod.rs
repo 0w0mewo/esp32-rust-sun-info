@@ -5,7 +5,7 @@ use crate::{
 };
 use alloc::format;
 use embedded_graphics::{pixelcolor, prelude::*};
-use time::{OffsetDateTime, UtcDateTime};
+use time::UtcDateTime;
 
 mod moon_info;
 mod positions;
@@ -17,22 +17,14 @@ extern crate alloc;
 
 #[derive(Clone)]
 pub(crate) struct DatetimeStatus {
-    datetime: OffsetDateTime,
+    datetime: UtcDateTime,
     last_ntp_status: NtpStatus,
 }
 
 impl DatetimeStatus {
-    pub fn update(&mut self, datetime: OffsetDateTime, last_ntp_status: NtpStatus) {
+    pub fn update(&mut self, datetime: UtcDateTime, last_ntp_status: NtpStatus) {
         self.last_ntp_status = last_ntp_status;
         self.datetime = datetime;
-    }
-
-    /// get UTC datetime, assume the offset datetime has DST offset
-    pub fn utc_assume_dst(&self) -> UtcDateTime {
-        let local_with_dst = &self.datetime;
-        local_with_dst
-            .to_utc()
-            .saturating_sub(local_with_dst.dst_offset_duration())
     }
 }
 
@@ -40,15 +32,15 @@ impl Default for DatetimeStatus {
     fn default() -> Self {
         Self {
             last_ntp_status: Default::default(),
-            datetime: OffsetDateTime::UNIX_EPOCH,
+            datetime: UtcDateTime::UNIX_EPOCH,
         }
     }
 }
 
 impl core::fmt::Display for DatetimeStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let local_now_with_dst = &self.datetime;
-        let utc_now = self.utc_assume_dst();
+        let utc_now = &self.datetime;
+        let local_now_with_dst = utc_now.to_local_with_dst();
 
         let local_time_line = if let NtpStatus::OK = self.last_ntp_status {
             format!(
