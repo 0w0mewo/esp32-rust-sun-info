@@ -203,9 +203,9 @@ impl SolarObject {
 pub trait PlanetUpdater {
     /// update horizontal position
     fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64);
-    /// update atronomical events, such as rise time, set time, etc, `local_midnight` should be
+    /// update rise/set events, `local_midnight` should be
     /// the local midnight in UTC
-    fn update_astron(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64);
+    fn update_riseset(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64);
     /// get rise event
     fn rise(&self) -> Option<&EventInfo>;
     /// get set event

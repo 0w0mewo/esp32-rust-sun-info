@@ -63,7 +63,7 @@ impl PlanetUpdater for Sun {
         self.pos = SolarObject::Sun.get_pos(now.to_julian(), now.delta_t(), lat, lon);
     }
 
-    fn update_astron(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64) {
+    fn update_riseset(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64) {
         // start searching at local midnight
         let (rise, set) = SolarObject::Sun.get_rise_set_today(
             local_midnight,

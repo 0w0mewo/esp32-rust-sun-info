@@ -79,11 +79,7 @@ impl PlanetUpdater for Moon {
         self.pos = SolarObject::Moon.get_pos(now.to_julian(), now.delta_t(), lat, lon);
     }
 
-    fn update_astron(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64) {
-        // upcoming moon events in UTC
-        self.new_moon = upcoming_moon_phase_jd(local_midnight, Phase::New);
-        self.full_moon = upcoming_moon_phase_jd(local_midnight, Phase::Full);
-
+    fn update_riseset(&mut self, local_midnight: &UtcDateTime, lat: f64, lon: f64) {
         // moonrise and moonset, start searching at local midnight
         let (rise, set) = SolarObject::Moon.get_rise_set_with_range(
             local_midnight,
@@ -144,6 +140,24 @@ impl Moon {
     /// update moon phase
     pub fn update_phase(&mut self, now: &UtcDateTime) {
         let jd = now.to_julian();
+        let decimal_year = now.decimal_year();
+        let decimal_year_off_by_lunar_period =
+            now.decimal_year_with_offset_days(LUNAR_ORBIT_PERIOD_AVG);
+
+        // helper for calculating JD of the next moon phase refers to today
+        let upcoming_moon_phase_jd = |phase: Phase| -> f64 {
+            let mut jd_phase = moon_phase_jd(decimal_year, phase);
+            if jd > jd_phase {
+                jd_phase = moon_phase_jd(decimal_year_off_by_lunar_period, phase);
+            }
+
+            jd_phase
+        };
+
+        // upcoming moon events in UTC
+        self.new_moon = upcoming_moon_phase_jd(Phase::New);
+        self.full_moon = upcoming_moon_phase_jd(Phase::Full);
+
         // find the Julian days of last new moon,
         // push back one lunar period and re-calculate it if the day is in the future.
         let mut jd_last_new_moon = moon_phase_jd(now.decimal_year(), Phase::New);
@@ -344,19 +358,6 @@ fn moon_phase_jd(decimal_year: f64, phase: Phase) -> f64 {
         + 0.000023 * sin(a14);
 
     jde + c + w + c_additional - delta_t_2000(decimal_year)
-}
-
-fn upcoming_moon_phase_jd(now: &UtcDateTime, phase: Phase) -> f64 {
-    let jd_now_utc = now.to_julian();
-    let mut jd_phase_utc = moon_phase_jd(now.decimal_year(), phase);
-    if jd_now_utc > jd_phase_utc {
-        jd_phase_utc = moon_phase_jd(
-            now.decimal_year_with_offset_days(LUNAR_ORBIT_PERIOD_AVG),
-            phase,
-        );
-    }
-
-    jd_phase_utc
 }
 
 /// Meeus table 47.A

@@ -90,7 +90,7 @@ async fn main(spawner: Spawner) -> ! {
 
         // local midnight in UTC
         let midnight = local_now.replace_time(Time::MIDNIGHT).to_utc();
-        sun.update_astron(&midnight, lat, lon);
+        sun.update_riseset(&midnight, lat, lon);
 
         // local midnight of tonight in UTC
         let midnight_tonight = {
@@ -109,7 +109,7 @@ async fn main(spawner: Spawner) -> ! {
                 &midnight
             }
         };
-        moon.update_astron(midnight_tonight, lat, lon);
+        moon.update_riseset(midnight_tonight, lat, lon);
         moon.update_phase(now);
 
         // notify UI update
