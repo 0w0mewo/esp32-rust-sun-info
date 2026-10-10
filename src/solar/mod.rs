@@ -125,9 +125,8 @@ impl SolarObject {
 
         let mut quadratic = QuadraticInterpolator::default();
 
-        // sine altitude of the object from given hour offset of JD0
-        let sin_altitude = |hr: f64| {
-            let jd = jd0 + hr * DAY_PER_HOUR;
+        // sine altitude at JD
+        let sin_altitude = |jd: f64| {
             let jde = jd - J2000 + dt_days;
             let (ra_rad, dec_rad) = match self {
                 SolarObject::Moon => {
@@ -142,16 +141,22 @@ impl SolarObject {
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
         };
 
+        // sine altitude of the object from given hour offset of JD0
+        let sin_altitude_hr = |hr: f64| {
+            let jd = jd0 + hr * DAY_PER_HOUR;
+            sin_altitude(jd)
+        };
+
         // search for any rise/set in jd0 - hr_backward hours to jd0 + hr_forward hours interval
         let mut hour_offset = -(hr_backward as f64) + 1.0;
-        let mut y_minus = sin_altitude(hour_offset - 1.0);
+        let mut y_minus = sin_altitude_hr(hour_offset - 1.0);
         while hour_offset <= hr_forward as f64 {
             if jd_rise.is_some() && jd_set.is_some() {
                 break;
             }
 
-            let y0 = sin_altitude(hour_offset);
-            let y_plus = sin_altitude(hour_offset + 1.0);
+            let y0 = sin_altitude_hr(hour_offset);
+            let y_plus = sin_altitude_hr(hour_offset + 1.0);
 
             // searching altitude = 0 degree by searching y = 0 where y might between y_minus, y0 and y_plus
             quadratic.fit(y_minus, y0, y_plus);
@@ -188,7 +193,21 @@ impl SolarObject {
             hour_offset += 2.0; // searching window size is 3
         }
 
-        let to_event_info = |jd| {
+        let to_event_info = |mut jd| {
+            const DT: f64 = 50.0 / SECONDS_PER_DAY;
+            const INV_2DT: f64 = 1.0 / (2.0 * DT);
+            const MAX_ITER: u8 = 2;
+
+            // newton iteration to refine the root, i.e, the rise/set time
+            for _ in 0..MAX_ITER {
+                let altitude = sin_altitude(jd);
+
+                // dh/dt = (h(t + dt) - h(t - dt)) / (2*dt)
+                // t0_next = t0_now - h/(dh/dt)
+                let delta_altitude = INV_2DT * (sin_altitude(jd + DT) - sin_altitude(jd - DT));
+                jd -= altitude / delta_altitude;
+            }
+
             let HorizontalCoordinate { azimuth, .. } = self.get_pos(jd, dt_days, lat, lon);
 
             EventInfo { jd, azimuth }
