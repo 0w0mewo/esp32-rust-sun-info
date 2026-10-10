@@ -99,6 +99,9 @@ fn populate_configs() -> std::io::Result<()> {
                 tz_local_time_type.ut_offset()
             }
         });
+    let tz_offset = time::UtcOffset::from_whole_seconds(tz_offset_secs).unwrap();
+    let (tz_offset_hr, tz_offset_minute, tz_offset_secs) = tz_offset.as_hms();
+    let tz_offset_hr_dst = tz_offset_hr + 1;
 
     let mut config_rs = std::fs::File::options()
         .write(true)
@@ -115,9 +118,9 @@ pub const LAT: f64 = {lat};
 pub const LON: f64 = {lon}; // {tz_str}
 
 /// standard time zone offset reference to UTC, without DST rules
-pub const TZ_OFFSET: time::UtcOffset = time::UtcOffset::from_whole_seconds({tz_offset_secs}).unwrap_or(time::UtcOffset::UTC);
+pub const TZ_OFFSET: time::UtcOffset = time::macros::offset!({tz_offset_hr:+02}:{tz_offset_minute:02}:{tz_offset_secs:02});
 /// time zone offset when DST enabled
-pub const TZ_OFFSET_DST: time::UtcOffset = time::UtcOffset::from_whole_seconds({tz_offset_secs} + 3600).unwrap_or(time::UtcOffset::UTC);
+pub const TZ_OFFSET_DST: time::UtcOffset = time::macros::offset!({tz_offset_hr_dst:+02}:{tz_offset_minute:02}:{tz_offset_secs:02});
 
 /// DST rules, (start, end)
 pub const TZ_DST_RULES: &[(i64, i64)] = &{dst_transit_table};

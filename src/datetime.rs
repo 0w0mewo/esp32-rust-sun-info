@@ -1,7 +1,7 @@
 use core::f64::consts::TAU;
 
 use libm::floor;
-use time::{Date, OffsetDateTime, PlainDateTime, SignedDuration, UtcDateTime, UtcOffset};
+use time::{Date, OffsetDateTime, PlainDateTime, SignedDuration, Time, UtcDateTime, UtcOffset};
 
 use crate::{
     HOUR_PER_RAD, SECONDS_PER_DAY,
@@ -17,6 +17,7 @@ pub const UNIX_EPOCH_PLAIN: PlainDateTime = PlainDateTime::new(
     UtcDateTime::UNIX_EPOCH.date(),
     UtcDateTime::UNIX_EPOCH.time(),
 );
+pub const MORNING: Time = time::macros::time!(08:00:00);
 
 pub trait AstronDatetimeExt: DateExt {
     /// convert from julian days to civil datetime

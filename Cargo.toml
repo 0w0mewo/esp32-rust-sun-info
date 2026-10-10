@@ -61,7 +61,7 @@ sntpc-net-embassy = { version = "0.11", default-features = false }
 
 # misc lib
 libm = "0.2.16"
-time = { version = "0.3", default-features = false }
+time = { version = "0.3", default-features = false, features = ["macros"] }
 thiserror = { version = "2.0.19", default-features = false }
 static_cell      = "2.1.1"
 critical-section = "1.2.0"

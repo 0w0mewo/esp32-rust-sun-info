@@ -23,6 +23,7 @@ use esp_hal::system;
 use esp_println::println;
 use lib::MICROSECS_PER_SEC;
 use lib::board::{Board, InputType};
+use lib::datetime::MORNING;
 use lib::datetime::UtOffsetExt;
 use lib::events::NtpStatus;
 use lib::solar::PlanetUpdater;
@@ -96,7 +97,7 @@ async fn main(spawner: Spawner) -> ! {
             let sunrise_time = sun
                 .rise()
                 .map(|event_info| event_info.event_datetime_local().time())
-                .unwrap_or(Time::from_hms(8, 0, 0).unwrap());
+                .unwrap_or(MORNING);
 
             if local_now.time() >= sunrise_time {
                 // forward to 00:00 of next day

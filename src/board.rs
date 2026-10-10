@@ -143,11 +143,9 @@ impl Board {
         // TODO: initialise I2C1 and wrap it as RefCellDevice and pass it around to other i2c based sensors
 
         // setup for embassy
-        let sleep = esp_rtos::sleep::configure(perip.LPWR);
-        esp_rtos::start_with_idle_hook(
+        esp_rtos::start(
             timg::TimerGroup::new(perip.TIMG0).timer0,
             perip.FROM_CPU_INTR0,
-            sleep.light_sleep_hook
         );
 
         // setup wifi and network stack
