@@ -21,7 +21,7 @@ use static_cell::StaticCell;
 const SSID: &str = env!("WIFI_SSID");
 const PSWD: &str = env!("WIFI_PSWD");
 
-use crate::events::{NtpStatus, StatusLedCommand};
+use crate::events::{LedCommand, NtpStatus};
 use crate::ntp::fetch_timestamp_ntp;
 use crate::ui::{self};
 use crate::{AppError, rand_u64};
@@ -82,8 +82,6 @@ pub struct Board {
     pub net_stack: embassy_net::Stack<'static>,
     /// button
     pub button: Rc<InputType<'static>>,
-    /// RGB LED
-    rgb_led: RgbLedType<'static>,
 }
 
 impl Board {
@@ -95,8 +93,7 @@ impl Board {
         esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 98768);
 
         // RTC peripheral
-        let mut rtc = rtc_cntl::Rtc::new(perip.RTC_TIMER);
-        rtc.rwdt.disable();
+        let rtc = rtc_cntl::Rtc::new(perip.RTC_TIMER);
         let rtc = Rc::new(rtc);
 
         // led pin, active low
@@ -105,7 +102,6 @@ impl Board {
             gpio::Level::Low,
             gpio::OutputConfig::default(),
         );
-        spawner.spawn(status_led_task(status_led).unwrap());
 
         // share access i2c0 bus with static lifetime and async feature
         let i2c0_bus = {
@@ -125,14 +121,9 @@ impl Board {
         // RGB led
         let freq = Rate::from_mhz(80);
         let rmt = rmt::Rmt::new(perip.RMT, freq).unwrap().into_async();
-        let rgb_led: esp_hal_smartled::RmtSmartLeds<
-            '_,
-            { esp_hal_smartled::buffer_size::<RGB8>(1) },
-            esp_hal::Async,
-            RGB8,
-            esp_hal_smartled::color_order::Grb,
-        > = esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, perip.GPIO33, freq)
-            .unwrap();
+        let rgb_led: RgbLedType<'_> =
+            esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, perip.GPIO33, freq)
+                .unwrap();
 
         // button
         let button = MutexAsync::new(gpio::Input::new(
@@ -143,9 +134,11 @@ impl Board {
         // TODO: initialise I2C1 and wrap it as RefCellDevice and pass it around to other i2c based sensors
 
         // setup for embassy
-        esp_rtos::start(
+        let sleep = esp_rtos::sleep::configure(perip.LPWR);
+        esp_rtos::start_with_idle_hook(
             timg::TimerGroup::new(perip.TIMG0).timer0,
             perip.FROM_CPU_INTR0,
+            sleep.light_sleep_hook,
         );
 
         // setup wifi and network stack
@@ -154,19 +147,21 @@ impl Board {
         // NTP time sync task
         spawner.spawn(ntp_task(net_stack, Rc::clone(&rtc)).unwrap());
 
+        // led task
+        spawner.spawn(led_task(status_led, rgb_led).unwrap());
+
         Self {
             rtc,
             net_stack,
             i2c0_bus,
             button,
-            rgb_led,
         }
     }
 
     /// wait for network ready
     pub async fn wait_for_network(&mut self) -> Result<(), AppError> {
         // turn on status LED
-        StatusLedCommand::On.notify().await;
+        LedCommand::On.notify().await;
         wait_networking_ready(&self.net_stack).await?;
 
         if let Some(config) = self.net_stack.config_v4() {
@@ -174,34 +169,38 @@ impl Board {
         }
 
         // turn off status LED when connected
-        StatusLedCommand::Off.notify().await;
+        LedCommand::Off.notify().await;
         Ok(())
-    }
-
-    #[inline]
-    pub async fn set_rgb_led_color(&mut self, color: RGB8, b: u8) {
-        self.rgb_led
-            .write(brightness(gamma([color].into_iter()), b))
-            .await
-            .unwrap_or_default();
     }
 }
 
 #[embassy_executor::task]
-async fn status_led_task(mut led: gpio::Output<'static>) {
+async fn led_task(mut led: gpio::Output<'static>, mut rgb_led: RgbLedType<'static>) {
     loop {
-        match StatusLedCommand::wait_for().await {
-            StatusLedCommand::On => {
+        match LedCommand::wait_for().await {
+            LedCommand::On => {
                 led.set_low();
             }
-            StatusLedCommand::Off => {
+            LedCommand::Off => {
                 led.set_high();
             }
-            StatusLedCommand::Blink(times) => {
+            LedCommand::Blink(times) => {
                 for _ in 0..times {
                     led.toggle();
                     Timer::after_millis(300).await;
                 }
+            }
+            LedCommand::Toggle => {
+                led.toggle();
+            }
+            LedCommand::RgbaColor {
+                color,
+                brightness: b,
+            } => {
+                rgb_led
+                    .write(brightness(gamma([color].into_iter()), b))
+                    .await
+                    .unwrap_or_default();
             }
         }
     }
@@ -258,12 +257,12 @@ async fn ntp_task(net_stack: embassy_net::Stack<'static>, rtc: Rc<rtc_cntl::Rtc<
         match fetch_timestamp_ntp(net_stack, rtc.current_time_us()).await {
             Ok(ts) => {
                 NtpStatus::OK.notify();
-                StatusLedCommand::Off.notify().await;
+                LedCommand::Off.notify().await;
                 rtc.set_current_time_us(ts);
             }
             Err(e) => {
                 NtpStatus::Err.notify();
-                StatusLedCommand::Blink(5).notify().await;
+                LedCommand::Blink(5).notify().await;
                 println!("NTP error: {}, retrying..", e);
 
                 Timer::after_secs(5).await;

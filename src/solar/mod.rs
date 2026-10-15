@@ -61,13 +61,7 @@ impl SolarObject {
         let lst = sidereal_time(jd, lon_rad);
 
         let jde = jd - J2000 + delta_t;
-        let (ra, dec, dist) = match self {
-            SolarObject::Moon => moon_coord(jde),
-            SolarObject::Sun => {
-                let (ra, dec) = sun_coord(jde);
-                (ra, dec, 0.0)
-            }
-        };
+        let (ra, dec, dist) = self.apparent_ra_dec_r(jde);
         let hour_angle = lst - ra;
 
         let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, lat_rad, dec);
@@ -128,14 +122,7 @@ impl SolarObject {
         // sine altitude at JD
         let sin_altitude = |jd: f64| {
             let jde = jd - J2000 + dt_days;
-            let (ra_rad, dec_rad) = match self {
-                SolarObject::Moon => {
-                    let (ra, dec, _) = moon_coord(jde);
-                    (ra, dec)
-                }
-                SolarObject::Sun => sun_coord(jde),
-            };
-
+            let (ra_rad, dec_rad, _) = self.apparent_ra_dec_r(jde);
             let hr_angle_rad = sidereal_time(jd, lon_rad) - ra_rad;
 
             sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
@@ -202,7 +189,7 @@ impl SolarObject {
             for _ in 0..MAX_ITER {
                 let altitude = sin_altitude(jd);
 
-                // dh/dt = (h(t + dt) - h(t - dt)) / (2*dt)
+                // central difference: dh/dt = (h(t + dt) - h(t - dt)) / (2*dt)
                 // t0_next = t0_now - h/(dh/dt)
                 let delta_altitude = INV_2DT * (sin_altitude(jd + DT) - sin_altitude(jd - DT));
                 jd -= altitude / delta_altitude;
@@ -216,6 +203,17 @@ impl SolarObject {
         let set = jd_set.map(to_event_info);
 
         (rise, set)
+    }
+
+    /// apparent RA, DEC and distance to the planet
+    fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
+        match self {
+            SolarObject::Moon => moon_coord(jde),
+            SolarObject::Sun => {
+                let (ra, dec) = sun_coord(jde);
+                (ra, dec, 0.0)
+            }
+        }
     }
 }
 

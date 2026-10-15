@@ -1,6 +1,7 @@
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal,
 };
+use smart_leds::RGB8;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub enum NtpStatus {
@@ -36,22 +37,29 @@ impl core::fmt::Display for NtpStatus {
     }
 }
 
-static LED_CMD: Channel<CriticalSectionRawMutex, StatusLedCommand, 2> = Channel::new();
+static LED_CMD: Channel<CriticalSectionRawMutex, LedCommand, 2> = Channel::new();
 
 #[derive(Clone, Copy, Default)]
-pub enum StatusLedCommand {
+pub enum LedCommand {
+    /// turn on blue LED
     On,
+    /// turn off blue LED
     #[default]
     Off,
+    /// blink blue LED the given times in a short period
     Blink(u8),
+    /// toggle blue LED
+    Toggle,
+    /// set the color and brightness of the RGB LED, (Not the blue status LED)
+    RgbaColor { color: RGB8, brightness: u8 },
 }
 
-impl StatusLedCommand {
+impl LedCommand {
     pub async fn notify(&self) {
         LED_CMD.send(*self).await;
     }
 
-    pub async fn wait_for() -> StatusLedCommand {
+    pub async fn wait_for() -> LedCommand {
         LED_CMD.receive().await
     }
 }

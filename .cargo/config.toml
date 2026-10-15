@@ -1,5 +1,8 @@
 [target.xtensa-esp32-none-elf]
 runner = "espflash flash --monitor --chip esp32"
+rustflags = [
+  "-C", "link-arg=-nostartfiles",
+]
 
 [env]
 WIFI_SSID = ""
@@ -10,10 +13,6 @@ LAT=""
 LON=""
 
 [build]
-rustflags = [
-  "-C", "link-arg=-nostartfiles",
-]
-
 target = "xtensa-esp32-none-elf"
 
 [unstable]

@@ -23,8 +23,8 @@ use esp_hal::system;
 use esp_println::println;
 use lib::MICROSECS_PER_SEC;
 use lib::board::{Board, InputType};
-use lib::datetime::MORNING;
-use lib::datetime::UtOffsetExt;
+use lib::datetime::{AstronDatetimeExt, UtOffsetExt};
+use lib::events::LedCommand;
 use lib::events::NtpStatus;
 use lib::solar::PlanetUpdater;
 use lib::solar::moon::Moon;
@@ -85,30 +85,32 @@ async fn main(spawner: Spawner) -> ! {
 
     // update astronomical events
     let astron_update = async |sun: &mut Sun, moon: &mut Moon, now: &UtcDateTime| {
-        // local time with DST offset
-        let local_now = now.to_offset(now.dst_offset());
+        let local_now = now.to_offset(now.dst_offset()); // local time with DST offset
+        let midnight = local_now.replace_time(Time::MIDNIGHT).to_utc(); // midnight today
+        let midnight_next = midnight.saturating_add(SignedDuration::days(1)); // midnight tomorrow
 
-        // local midnight in UTC
-        let midnight = local_now.replace_time(Time::MIDNIGHT).to_utc();
+        // the midnight before upcoming sunrise
+        let midnight_tonight = sun
+            .rise()
+            .map(|event_info| {
+                let rise_jd = event_info.jd;
+                let now_jd = now.to_julian();
+
+                // it's still at night if the current time is before sunrise,
+                // use 00:00 today as midnight in this case,
+                // forward to 00:00 next day otherwise
+                if now_jd < rise_jd {
+                    &midnight
+                } else {
+                    &midnight_next
+                }
+            })
+            .unwrap_or(&UtcDateTime::UNIX_EPOCH);
+
+        // sun
         sun.update_riseset(&midnight, lat, lon);
 
-        // local midnight of tonight in UTC
-        let midnight_tonight = {
-            let sunrise_time = sun
-                .rise()
-                .map(|event_info| event_info.event_datetime_local().time())
-                .unwrap_or(MORNING);
-
-            if local_now.time() >= sunrise_time {
-                // forward to 00:00 of next day
-                &local_now
-                    .saturating_add(SignedDuration::hours(24 - sunrise_time.hour() as i64))
-                    .replace_time(Time::MIDNIGHT)
-                    .to_utc()
-            } else {
-                &midnight
-            }
-        };
+        // moon
         moon.update_riseset(midnight_tonight, lat, lon);
         moon.update_phase(now);
 
@@ -172,8 +174,16 @@ async fn main(spawner: Spawner) -> ! {
             let day_prog = sun.day_progress(&utc_now);
             let brigtness = day_prog.to_pwm_duty_cycle_percent().max(5);
             let sun_color = sun.color_at(day_prog);
-            board.set_rgb_led_color(sun_color, brigtness).await;
+            LedCommand::RgbaColor {
+                color: sun_color,
+                brightness: brigtness,
+            }
+            .notify()
+            .await;
         }
+
+        // status LED blink
+        LedCommand::Toggle.notify().await;
     }
 }
 
