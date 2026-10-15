@@ -89,6 +89,10 @@ async fn main(spawner: Spawner) -> ! {
         let midnight = local_now.replace_time(Time::MIDNIGHT).to_utc(); // midnight today
         let midnight_next = midnight.saturating_add(SignedDuration::days(1)); // midnight tomorrow
 
+        // sun must update before moon because the moonrise/set calculation depends on 
+        // the time of sunrise
+        sun.update_riseset(&midnight, lat, lon);
+
         // the midnight before upcoming sunrise
         let midnight_tonight = sun
             .rise()
@@ -106,9 +110,6 @@ async fn main(spawner: Spawner) -> ! {
                 }
             })
             .unwrap_or(&UtcDateTime::UNIX_EPOCH);
-
-        // sun
-        sun.update_riseset(&midnight, lat, lon);
 
         // moon
         moon.update_riseset(midnight_tonight, lat, lon);
