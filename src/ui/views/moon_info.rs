@@ -83,7 +83,7 @@ impl Default for State {
 
 impl core::fmt::Display for State {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let no_riseset_info = "[No rise/set today]";
+        let no_riseset_info = "[No events tonight]";
         let rise = self.moonrise.map_or(no_riseset_info.into(), |rise| {
             format!(
                 "({:>3.0}{DEG_SYM})  {:02}-{:02} {:02}:{:02}",

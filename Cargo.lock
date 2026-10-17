@@ -862,7 +862,7 @@ dependencies = [
  "esp-sync",
  "esp32 0.41.0",
  "esp32c2",
- "esp32c3",
+ "esp32c3 0.33.0",
  "esp32c5",
  "esp32c6",
  "esp32c61",
@@ -937,7 +937,9 @@ dependencies = [
  "esp-metadata-generated",
  "esp-sync",
  "esp-wifi-sys-esp32",
+ "esp-wifi-sys-esp32c3",
  "esp32 0.42.0",
+ "esp32c3 0.34.0",
 ]
 
 [[package]]
@@ -979,7 +981,9 @@ dependencies = [
  "esp-rom-sys",
  "esp-sync",
  "esp-wifi-sys-esp32",
+ "esp-wifi-sys-esp32c3",
  "esp32 0.42.0",
+ "esp32c3 0.34.0",
  "heapless 0.9.3",
  "instability",
  "num-derive",
@@ -1020,6 +1024,7 @@ dependencies = [
  "document-features",
  "esp-metadata-generated",
  "esp32 0.41.0",
+ "esp32c3 0.33.0",
 ]
 
 [[package]]
@@ -1061,6 +1066,7 @@ dependencies = [
  "esp-rom-sys",
  "esp-sync",
  "esp32 0.41.0",
+ "esp32c3 0.33.0",
 ]
 
 [[package]]
@@ -1083,6 +1089,12 @@ name = "esp-wifi-sys-esp32"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4644d49bde1bdeb3cd20fcc8c08be09f8f67af4b80123e54f665fdebd9a3358"
+
+[[package]]
+name = "esp-wifi-sys-esp32c3"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1345555a7856033077e8ca26572e4739a1b43f8d52daaa0fdf6a1497fe88845"
 
 [[package]]
 name = "esp32"
@@ -1125,6 +1137,7 @@ dependencies = [
  "esp-radio",
  "esp-rtos",
  "libm",
+ "log",
  "smart-leds",
  "sntpc",
  "sntpc-net-embassy",
@@ -1150,6 +1163,15 @@ name = "esp32c3"
 version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffb892f670ff857033c1624f99ecba1a3f3cafa05c45d734bc129388276715cf"
+dependencies = [
+ "vcell",
+]
+
+[[package]]
+name = "esp32c3"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "569e03d871eac998bc62ef95a9a6d31a91fc0aaef0e0017a6b5a6a9c4759768a"
 dependencies = [
  "vcell",
 ]

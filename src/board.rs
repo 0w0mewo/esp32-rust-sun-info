@@ -13,8 +13,8 @@ use esp_hal::clock::CpuClock;
 use esp_hal::time::Rate;
 use esp_hal::{gpio, rtc_cntl, time, timer::timg};
 use esp_hal::{i2c, rmt};
-use esp_println::println;
 use esp_radio::wifi;
+use log::warn;
 use smart_leds::{RGB8, SmartLedsWriteAsync, brightness, gamma};
 use static_cell::StaticCell;
 
@@ -263,7 +263,7 @@ async fn ntp_task(net_stack: embassy_net::Stack<'static>, rtc: Rc<rtc_cntl::Rtc<
             Err(e) => {
                 NtpStatus::Err.notify();
                 LedCommand::Blink(5).notify().await;
-                println!("NTP error: {}, retrying..", e);
+                warn!("NTP error: {}, retrying..", e);
 
                 Timer::after_secs(5).await;
                 continue;

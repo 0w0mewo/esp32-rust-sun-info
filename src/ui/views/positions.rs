@@ -168,6 +168,7 @@ impl Drawable for State {
             // sunrise and sunset azimuth
             [&self.sunrise_azim, &self.sunset_azim]
                 .into_iter()
+                .filter(|az| az.is_sign_positive())
                 .for_each(|&az| {
                     PolarLine::new(compass.center, az, arm_len)
                         .draw(target)
@@ -177,6 +178,7 @@ impl Drawable for State {
             // moonrise and moonset azimuth
             [&self.moonrise_azim, &self.moonset_azim]
                 .into_iter()
+                .filter(|az| az.is_sign_positive())
                 .for_each(|&az| {
                     PolarLine::with_label(compass.center, az, arm_len, "m")
                         .label_at_line_middle(true)

@@ -9,31 +9,59 @@ name = "esp32-sun-info"
 path = "./src/main.rs"
 
 [features]
-default = ["ws2811"]
+default = ["ws2811", "esp32"]
+
+# RGB LED type
 ws2811 = []
 ws2812 = []
 ws2812b = []
 sk68 = []
 
+# esp32 support
+esp32 = [
+  "esp-hal/esp32",
+  "esp-backtrace/esp32",
+  "esp-rtos/esp32",
+  "esp-bootloader-esp-idf/esp32",
+  "esp-println/esp32",
+  "esp-radio/esp32",
+  "esp-hal-smartled/esp32"
+]
+
+# esp32c3 support
+esp32c3 = [
+  "esp-hal/esp32c3",
+  "esp-backtrace/esp32c3",
+  "esp-rtos/esp32c3",
+  "esp-bootloader-esp-idf/esp32c3",
+  "esp-println/esp32c3",
+  "esp-radio/esp32c3",
+  "esp-hal-smartled/esp32c3"
+]
+
+
 [dependencies]
-esp-hal = { version = "~1.2", features = ["esp32", "unstable"] }
-esp-backtrace = { version = "~0.20.0", features = [
-    "esp32",
-    "panic-handler",
-    "println",
-], default-features = false }
+esp-hal = { version = "~1.2", features = [
+  "unstable", 
+]}
+esp-backtrace = { version = "~0.20.0", default-features = false, features = [
+  "panic-handler",
+  "println",
+]}
 esp-rtos = { version = "0.4.0", features = [
   "embassy",
   "esp-alloc",
   "esp-radio",
-  "esp32",
-] }
-esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32"] }
-esp-println = { version = "0.18.0", features = ["esp32"] }
+]}
+esp-bootloader-esp-idf = { version = "0.6.0", features = []}
+esp-println = { version = "0.18.0", default-features = false, features = [
+  "auto",
+  "critical-section",
+  "log-04",
+]}
 esp-alloc = "0.11.0"
 esp-radio = { version = "1.0.0-beta.1", features = [
   "esp-alloc",
-  "esp32",
   "unstable",
   "wifi",
 ] }
@@ -42,7 +70,7 @@ esp-radio = { version = "1.0.0-beta.1", features = [
 # for more networking protocol support see https://crates.io/crates/edge-net
 embassy-executor = { version = "0.10.0", features = [] }
 embassy-futures = { version = "0.1.2", features = [] }
-embassy-time = "0.5.0"
+embassy-time = { version = "0.5.0", features = [] }
 embassy-sync = "0.8"
 embassy-embedded-hal = "0.6.0"
 embassy-net = { version = "0.9.1", features = [
@@ -66,6 +94,7 @@ thiserror = { version = "2.0.19", default-features = false }
 static_cell      = "2.1.1"
 critical-section = "1.2.0"
 embedded-graphics-unicodefonts = "0.2"
+log = "0.4"
 
 # display
 ssd1306 = { version = "0.10.0", features = ["async"] }
@@ -74,7 +103,7 @@ display-interface = "0.5.0"
 
 # RGB LED
 smart-leds = "0.4"
-esp-hal-smartled = { version = "0.18", features = ["esp32"] }
+esp-hal-smartled = { version = "0.18", features = [] }
 
 [build-dependencies]
 tz-rs = { version = "0.7" }

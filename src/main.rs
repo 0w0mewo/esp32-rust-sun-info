@@ -20,7 +20,6 @@ use lib::config::*;
 use embassy_time::Duration;
 use esp_backtrace as _;
 use esp_hal::system;
-use esp_println::println;
 use lib::MICROSECS_PER_SEC;
 use lib::board::{Board, InputType};
 use lib::datetime::{AstronDatetimeExt, UtOffsetExt};
@@ -32,6 +31,7 @@ use lib::solar::sun::Sun;
 use lib::ui::Ui;
 use lib::ui::ui_flush_task;
 use lib::ui::{self};
+use log::error;
 use time::SignedDuration;
 use time::Time;
 use time::UtcDateTime;
@@ -46,6 +46,8 @@ esp_bootloader_esp_idf::esp_app_desc!();
 )]
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
+    esp_println::logger::init_logger_from_env();
+
     // initialise board perhiphal resources
     let mut board = Board::new(&spawner).await;
 
@@ -65,7 +67,7 @@ async fn main(spawner: Spawner) -> ! {
     ui::UpdateCmd::redraw().await;
 
     board.wait_for_network().await.unwrap_or_else(|e| {
-        println!("Startup failed: {}, reseting..", e);
+        error!("Startup failed: {}, reseting..", e);
         system::software_reset();
     });
 
@@ -89,7 +91,7 @@ async fn main(spawner: Spawner) -> ! {
         let midnight = local_now.replace_time(Time::MIDNIGHT).to_utc(); // midnight today
         let midnight_next = midnight.saturating_add(SignedDuration::days(1)); // midnight tomorrow
 
-        // sun must update before moon because the moonrise/set calculation depends on 
+        // sun must update before moon because the moonrise/set calculation depends on
         // the time of sunrise
         sun.update_riseset(&midnight, lat, lon);
 
