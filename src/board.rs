@@ -16,7 +16,7 @@ use esp_hal::{i2c, rmt};
 use esp_radio::wifi;
 use log::warn;
 use smart_leds::{RGB8, SmartLedsWriteAsync, brightness, gamma};
-use static_cell::StaticCell;
+use static_cell::{ConstStaticCell, StaticCell};
 
 const SSID: &str = env!("WIFI_SSID");
 const PSWD: &str = env!("WIFI_PSWD");
@@ -70,6 +70,11 @@ const RGB_LED_TIMING: esp_hal_smartled::Timing = cfg_select! {
     feature = "sk68" => esp_hal_smartled::SK68XX_TIMING,
     _ => esp_hal_smartled::WS2811_TIMING
 };
+
+/// static allocated memory for embassy network stack because it required static lifetime and can be initialised at compile time.
+/// It is used by the network stack only, therefore, it `.take()` only once by the network stack at `::new()`
+static NETSTACK_MEMORY: ConstStaticCell<StackResources<3>> =
+    ConstStaticCell::new(StackResources::new());
 
 pub struct Board {
     /// shared i2c0 bus with mutex
@@ -380,14 +385,10 @@ fn wifi_setup(
     let wifi_sta_intf = wifi::Interface::station();
 
     // embassy network stack init
-    let res = {
-        static RES: StaticCell<StackResources<3>> = StaticCell::new();
-        RES.init(StackResources::new())
-    };
     let (net_stack, net_runner) = embassy_net::new(
         wifi_sta_intf,
         embassy_net::Config::dhcpv4(Default::default()),
-        res,
+        NETSTACK_MEMORY.take(),
         rand_u64(),
     );
 
