@@ -64,8 +64,15 @@ fn linker_be_nice() {
         std::process::exit(0);
     }
 
+    #[cfg(feature = "esp32")]
     println!(
         "cargo:rustc-link-arg=-Wl,--error-handling-script={}",
+        std::env::current_exe().unwrap().display()
+    );
+
+    #[cfg(feature = "esp32c3")]
+    println!(
+        "cargo:rustc-link-arg=--error-handling-script={}",
         std::env::current_exe().unwrap().display()
     );
 }

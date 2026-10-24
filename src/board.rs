@@ -89,21 +89,43 @@ impl Board {
         let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
         let perip = esp_hal::init(config);
 
+        // pins for different SoC
+        let scl_pin = cfg_select! {
+            feature = "esp32" => perip.GPIO18,
+            feature = "esp32c3" => perip.GPIO4,
+        };
+        let sda_pin = cfg_select! {
+            feature = "esp32" => perip.GPIO23,
+            feature = "esp32c3" => perip.GPIO3,
+        };
+        let rgb_rmt_pin = cfg_select! {
+            feature = "esp32" => perip.GPIO33,
+            feature = "esp32c3" => perip.GPIO8,
+        };
+        let btn_pin = cfg_select! {
+            feature = "esp32" => perip.GPIO19,
+            feature = "esp32c3" => perip.GPIO9,
+        };
+
         // heap allocator
-        esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 98768);
+        const EXTRA_HEAP_SIZE: usize = cfg_select! {
+            feature = "esp32" => 24 * 1024,
+            feature = "esp32c3" => 64 * 1024,
+        };
+        const HEAP_SIZE: usize = cfg_select! {
+            feature = "esp32" => 98768,
+            feature = "esp32c3" => 66320,
+        };
+
+        esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: HEAP_SIZE);
+        esp_alloc::heap_allocator!(size: EXTRA_HEAP_SIZE);
 
         // RTC peripheral
         let rtc = rtc_cntl::Rtc::new(perip.RTC_TIMER);
         let rtc = Rc::new(rtc);
 
-        // led pin, active low
-        let status_led = gpio::Output::new(
-            perip.GPIO22,
-            gpio::Level::Low,
-            gpio::OutputConfig::default(),
-        );
-
         // share access i2c0 bus with static lifetime and async feature
+
         let i2c0_bus = {
             static I2C_BUS: StaticCell<I2cBusAsync<'static>> = StaticCell::new();
             let i2c_bus = i2c::master::I2c::new(
@@ -111,8 +133,8 @@ impl Board {
                 i2c::master::Config::default().with_frequency(time::Rate::from_khz(400)),
             )
             .unwrap()
-            .with_scl(perip.GPIO18)
-            .with_sda(perip.GPIO23)
+            .with_scl(scl_pin)
+            .with_sda(sda_pin)
             .into_async();
 
             I2C_BUS.init(MutexAsync::new(i2c_bus))
@@ -122,12 +144,12 @@ impl Board {
         let freq = Rate::from_mhz(80);
         let rmt = rmt::Rmt::new(perip.RMT, freq).unwrap().into_async();
         let rgb_led: RgbLedType<'_> =
-            esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, perip.GPIO33, freq)
+            esp_hal_smartled::RmtSmartLeds::new(RGB_LED_TIMING, rmt.channel0, rgb_rmt_pin, freq)
                 .unwrap();
 
         // button
         let button = MutexAsync::new(gpio::Input::new(
-            perip.GPIO19,
+            btn_pin,
             gpio::InputConfig::default().with_pull(gpio::Pull::Up),
         ));
         let button = Rc::new(button);
@@ -148,7 +170,20 @@ impl Board {
         spawner.spawn(ntp_task(net_stack, Rc::clone(&rtc)).unwrap());
 
         // led task
-        spawner.spawn(led_task(status_led, rgb_led).unwrap());
+        cfg_select! {
+            feature = "esp32" => {
+                // led pin, active low
+                let status_led = gpio::Output::new(
+                    perip.GPIO22,
+                    gpio::Level::Low,
+                    gpio::OutputConfig::default(),
+                );
+                spawner.spawn(led_task(status_led, rgb_led).unwrap());
+            },
+            feature = "esp32c3" => {
+                spawner.spawn(led_task(rgb_led).unwrap());
+            }
+        };
 
         Self {
             rtc,
@@ -174,6 +209,7 @@ impl Board {
     }
 }
 
+#[cfg(feature = "esp32")]
 #[embassy_executor::task]
 async fn led_task(mut led: gpio::Output<'static>, mut rgb_led: RgbLedType<'static>) {
     loop {
@@ -203,6 +239,55 @@ async fn led_task(mut led: gpio::Output<'static>, mut rgb_led: RgbLedType<'stati
                     .unwrap_or_default();
             }
         }
+    }
+}
+
+#[cfg(feature = "esp32c3")]
+#[embassy_executor::task]
+async fn led_task(mut rgb_led: RgbLedType<'static>) {
+    let mut last_color = RGB8::new(0, 0, 255);
+    let mut last_brightness = 90;
+    let mut toggle = false;
+
+    loop {
+        let led_cmd = LedCommand::wait_for().await;
+
+        match led_cmd {
+            LedCommand::On => {
+                toggle = true;
+            }
+            LedCommand::Off => {
+                toggle = false;
+            }
+            LedCommand::Blink(times) => {
+                for _ in 0..times {
+                    let b = if toggle { last_brightness } else { 0 };
+                    rgb_led
+                        .write(brightness(gamma([last_color].into_iter()), b))
+                        .await
+                        .unwrap_or_default();
+
+                    toggle = !toggle;
+                    Timer::after_millis(300).await;
+                }
+            }
+            LedCommand::Toggle => {
+                toggle = !toggle;
+            }
+            LedCommand::RgbaColor {
+                color,
+                brightness: b,
+            } => {
+                last_color = color;
+                last_brightness = b;
+            }
+        }
+
+        let b = if toggle { last_brightness } else { 0 };
+        rgb_led
+            .write(brightness(gamma([last_color].into_iter()), b))
+            .await
+            .unwrap_or_default();
     }
 }
 

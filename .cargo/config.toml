@@ -4,6 +4,12 @@ rustflags = [
   "-C", "link-arg=-nostartfiles",
 ]
 
+[target.riscv32imc-unknown-none-elf]
+runner = "espflash flash --monitor --chip esp32c3"
+rustflags = [
+  "-C", "force-frame-pointers",
+]
+
 [env]
 WIFI_SSID = ""
 WIFI_PSWD = ""

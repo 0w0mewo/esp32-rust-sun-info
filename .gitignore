@@ -17,3 +17,4 @@ target
 rustc-ice-*.txt
 
 src/config.rs
+mybuild.sh

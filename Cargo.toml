@@ -25,7 +25,7 @@ esp32 = [
   "esp-bootloader-esp-idf/esp32",
   "esp-println/esp32",
   "esp-radio/esp32",
-  "esp-hal-smartled/esp32"
+  "esp-hal-smartled/esp32",
 ]
 
 # esp32c3 support
@@ -36,7 +36,7 @@ esp32c3 = [
   "esp-bootloader-esp-idf/esp32c3",
   "esp-println/esp32c3",
   "esp-radio/esp32c3",
-  "esp-hal-smartled/esp32c3"
+  "esp-hal-smartled/esp32c3",
 ]
 
 
