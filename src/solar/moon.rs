@@ -3,9 +3,7 @@ use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 use time::UtcDateTime;
 
 use crate::{
-    HorizontalCoordinate,
-    datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
-    solar::{EventInfo, PlanetUpdater, planet::SolarObject},
+    HorizontalCoordinate, datetime::{AstronDatetimeExt, DateExt, delta_t_2000}, solar::{EventInfo, PlanetUpdater, mean_obliq, nutation::nutation_iau2006, planet::SolarObject},
 };
 
 const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;
@@ -564,12 +562,12 @@ pub(crate) fn moon_coord(jde: f64) -> (f64, f64, f64) {
         + 127.0 * sin(l_prime_rad - m_prime_rad)
         - 115.0 * sin(l_prime_rad + m_prime_rad);
 
-    // Ch. 22
-    let (dpsi, eps) = nutation_obliquity(t);
-    let eps_rad = eps.to_radians();
+    // nutation in longitude and obliquity
+    let (dpsi, deps) = nutation_iau2006(t);
+    let eps_rad = mean_obliq(t) + deps; // true obliquity
 
     // convert to radians for trig functions
-    let l_rad = (l_prime + sum_l / 1e6 + dpsi).to_radians();
+    let l_rad = (l_prime + sum_l / 1e6).to_radians() + dpsi;
     let b_rad = (sum_b / 1e6).to_radians();
 
     // convert equatorial coordinates and distance in km
@@ -581,21 +579,4 @@ pub(crate) fn moon_coord(jde: f64) -> (f64, f64, f64) {
     let dist = 385000.56 + sum_r / 1000.0;
 
     (ra, dec, dist)
-}
-
-///  Nutation in longitude (Δψ) and true obliquity of the ecliptic, in degress
-fn nutation_obliquity(t: f64) -> (f64, f64) {
-    let om = (125.04452 - 1934.136261 * t).to_radians(); // longitude of the Moon's ascending node
-    let ls = (280.4665 + 36000.7698 * t).to_radians(); // mean longitude of the Sun
-    let lm = (218.3165 + 481267.8813 * t).to_radians(); // mean longitude of the Moon
-    let dpsi = (-17.20 * sin(om) - 1.32 * sin(2.0 * ls) - 0.23 * sin(2.0 * lm)
-        + 0.21 * sin(2.0 * om))
-        / 3600.0;
-    let deps = (9.20 * cos(om) + 0.57 * cos(2.0 * ls) + 0.10 * cos(2.0 * lm)
-        - 0.09 * cos(2.0 * om))
-        / 3600.0;
-    let eps0 = 23.439291 - t * (0.0130042 + t * (0.00000016 - t * 0.000000504)); // 22.2 mean obliquity
-    let eps = eps0 + deps;
-
-    (dpsi, eps)
 }
