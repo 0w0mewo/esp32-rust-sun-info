@@ -4,7 +4,7 @@ use alloc::format;
 
 use crate::{
     datetime::{UNIX_EPOCH_PLAIN, UtOffsetExt},
-    solar::{SolarObject, moon},
+    solar::{moon, planet::SolarObject},
     ui::{
         UpdateCmd,
         components::DEG_SYM,

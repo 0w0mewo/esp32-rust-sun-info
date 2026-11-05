@@ -5,7 +5,7 @@ use time::UtcDateTime;
 use crate::{
     HorizontalCoordinate,
     datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
-    solar::{EventInfo, PlanetUpdater, SolarObject},
+    solar::{EventInfo, PlanetUpdater, planet::SolarObject},
 };
 
 const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;

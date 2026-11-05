@@ -14,7 +14,7 @@ pub type SSD1306<DI> = ssd1306::Ssd1306Async<
     ssd1306::mode::BufferedGraphicsModeAsync<ssd1306::size::DisplaySize128x64>,
 >;
 
-use core::f64::consts::PI;
+use core::f64::consts::{PI, TAU};
 
 use esp_hal::rng;
 use libm::{asin, atan2, cos, fmod, sin, sincos, sqrt, tan};
@@ -24,6 +24,9 @@ use crate::datetime::DAYS_PER_JULIAN_CENTURY;
 pub const MICROSECS_PER_SEC: u64 = 1_000_000;
 const SECONDS_PER_DAY: f64 = 24.0 * 3600.0;
 pub const HOUR_PER_RAD: f64 = (1.0_f64 / 15.0).to_radians();
+
+/// radian per arcseconds, multiply this constant with arcseconds to convert to radians
+pub const RADS_PER_ARCSECOND: f64 = 1.0 / 60.0 / 60.0 * PI / 180.0;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -172,4 +175,9 @@ impl QuadraticInterpolator {
         self.xe = -self.b / (2.0 * self.a);
         self.ye = (self.a * self.xe + self.b) * self.xe + self.c;
     }
+}
+
+pub fn wrap_pi(rad: f64) -> f64 {
+    let rad = rad % TAU;
+    if rad.abs() > PI { rad - TAU } else { rad }
 }

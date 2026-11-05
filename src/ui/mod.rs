@@ -9,10 +9,11 @@ use time::UtcDateTime;
 use crate::board::I2cBusDeviceAsync;
 use crate::events::NtpStatus;
 use crate::solar::moon::{self, Moon};
+use crate::solar::planet::SolarObject;
 use crate::solar::sun::{
     self, NORTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, SOUTH_HEMISPHERE_ASTRON_SEASON_TRANSIT, Sun,
 };
-use crate::solar::{EventInfo, PlanetUpdater, SolarObject};
+use crate::solar::{EventInfo, PlanetUpdater};
 use crate::ui::views::View;
 use crate::{AppError, HorizontalCoordinate, SSD1306};
 

@@ -1,7 +1,7 @@
 use time::Time;
 
 use crate::datetime::UtOffsetExt;
-use crate::solar::SolarObject;
+use crate::solar::planet::SolarObject;
 use crate::ui::components::DEG_SYM;
 use crate::ui::views::TextBasedView;
 use crate::{

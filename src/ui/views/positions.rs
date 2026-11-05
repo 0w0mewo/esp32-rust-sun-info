@@ -13,7 +13,7 @@ use libm::{round, sincos};
 use crate::{
     HorizontalCoordinate,
     datetime::{AstronDatetimeExt, UtOffsetExt},
-    solar::SolarObject,
+    solar::planet::SolarObject,
     ui::{
         UpdateCmd,
         components::{CommonStatusTexts, Compass, DEG_SYM, MOON_SYM, PolarLine, SUN_SYM},
@@ -44,6 +44,9 @@ impl UpdateableFromCmd for State {
             &UpdateCmd::SetPosition { pos, obj } => match obj {
                 SolarObject::Moon => self.moon_pos = pos,
                 SolarObject::Sun => self.sun_pos = pos,
+                _ => {
+                    todo!()
+                }
             },
 
             UpdateCmd::SetRiseSet { obj, rise, set, .. } => {
@@ -59,6 +62,9 @@ impl UpdateableFromCmd for State {
                     SolarObject::Sun => {
                         self.sunrise_azim = rise_azimuth;
                         self.sunset_azim = set_azimuth;
+                    }
+                    _ => {
+                        todo!()
                     }
                 }
             }

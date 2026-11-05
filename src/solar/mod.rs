@@ -1,21 +1,21 @@
-use libm::{asin, cos, floor, fmod, round, sin};
+
+use libm::{floor, fmod, round};
 use time::{PlainDateTime, UtcDateTime};
 
 use crate::{
-    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, UtOffsetExt, sidereal_time},
-    sine_altitude,
-    solar::{moon::moon_coord, sun::sun_coord},
+    HorizontalCoordinate, RADS_PER_ARCSECOND, SECONDS_PER_DAY,
+    datetime::{AstronDatetimeExt, UtOffsetExt},
+    solar::planet::SolarObject,
 };
 
 pub mod moon;
+pub mod npb;
+pub mod nutation;
+pub mod planet;
 pub mod sun;
 
-#[derive(Clone, Copy)]
-pub enum SolarObject {
-    Sun,
-    Moon,
-}
+/// obliquity at J2000 in radians
+pub const MEAN_OBLIQUITY_J2000_RAD: f64 = mean_obliq(0.0);
 
 #[derive(Clone, Default)]
 pub struct EventInfo {
@@ -53,168 +53,15 @@ impl EventInfo {
     }
 }
 
-impl SolarObject {
-    /// ported from SunCalc: https://github.com/mourner/suncalc
-    fn get_pos(&self, jd: f64, delta_t: f64, lat: f64, lon: f64) -> HorizontalCoordinate {
-        let lat_rad = lat.to_radians();
-        let lon_rad = lon.to_radians();
-        let lst = sidereal_time(jd, lon_rad);
+/// Mean obliquity of the ecliptic, IAU 2006 precession model,
+/// `t` is julian centuries since JD2000
+/// return obliquity of ecliptic in radians
+const fn mean_obliq(t: f64) -> f64 {
+    let eps_arcsec = 84381.406 - 46.836769 * t - 0.0001831 * t * t + 0.00200340 * t * t * t
+        - 0.000000576 * t * t * t * t
+        - 0.0000000434 * t * t * t * t * t;
 
-        let jde = jd - J2000 + delta_t;
-        let (ra, dec, dist) = self.apparent_ra_dec_r(jde);
-        let hour_angle = lst - ra;
-
-        let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, lat_rad, dec);
-        if let SolarObject::Moon = self {
-            let altitude_geocentric_rad = pos.altitude.to_radians();
-            pos.altitude = (altitude_geocentric_rad
-                - asin(6378.14 / dist * cos(altitude_geocentric_rad)))
-            .to_degrees();
-        }
-
-        pos.apparent_altitude()
-    }
-
-    /// find upcoming rise and set events,
-    /// it searches forward 24 hours refers to the local midnight
-    ///
-    /// the event JD is in UT
-    #[inline]
-    fn get_rise_set_today(
-        &self,
-        local_midnight: &UtcDateTime,
-        lat: f64,
-        lon: f64,
-        refracted_horizon_rad: f64,
-    ) -> (Option<EventInfo>, Option<EventInfo>) {
-        self.get_rise_set_with_range(local_midnight, 0, 24, lat, lon, refracted_horizon_rad)
-    }
-
-    /// find upcoming rise and set events by brute forcing the crossing point,
-    /// it searches `hr_forward` hours forward and `hr_backward` hours backward refers to the `start` time
-    ///
-    /// the event JD is in UT
-    ///
-    /// derive from 'Astronomy on the Personal Computer, ch 3'
-    fn get_rise_set_with_range(
-        &self,
-        start: &UtcDateTime,
-        hr_backward: u8,
-        hr_forward: u8,
-        lat: f64,
-        lon: f64,
-        refracted_horizon_rad: f64,
-    ) -> (Option<EventInfo>, Option<EventInfo>) {
-        let lat_rad = lat.to_radians();
-        let lon_rad = lon.to_radians();
-
-        let jd0 = start.to_julian();
-        let dt_days = start.delta_t(); // delta T
-
-        // refraction
-        let refracted_sine_horizon_altitude = sin(refracted_horizon_rad);
-
-        let mut jd_rise = None;
-        let mut jd_set = None;
-
-        let mut quadratic = QuadraticInterpolator::default();
-
-        // sine altitude at JD
-        let sin_altitude = |jd: f64| {
-            let jde = jd - J2000 + dt_days;
-            let (ra_rad, dec_rad, _) = self.apparent_ra_dec_r(jde);
-            let hr_angle_rad = sidereal_time(jd, lon_rad) - ra_rad;
-
-            sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
-        };
-
-        // sine altitude of the object from given hour offset of JD0
-        let sin_altitude_hr = |hr: f64| {
-            let jd = jd0 + hr * DAY_PER_HOUR;
-            sin_altitude(jd)
-        };
-
-        // search for any rise/set in jd0 - hr_backward hours to jd0 + hr_forward hours interval
-        let mut hour_offset = -(hr_backward as f64) + 1.0;
-        let mut y_minus = sin_altitude_hr(hour_offset - 1.0);
-        while hour_offset <= hr_forward as f64 {
-            if jd_rise.is_some() && jd_set.is_some() {
-                break;
-            }
-
-            let y0 = sin_altitude_hr(hour_offset);
-            let y_plus = sin_altitude_hr(hour_offset + 1.0);
-
-            // searching altitude = 0 degree by searching y = 0 where y might between y_minus, y0 and y_plus
-            quadratic.fit(y_minus, y0, y_plus);
-            if let Some(roots) = quadratic.roots() {
-                match roots {
-                    QuadraticRoots::One { root } => {
-                        let t = hour_offset + root;
-                        let t = t * DAY_PER_HOUR + jd0; // decimal hour to JD
-
-                        if y_minus < 0.0 {
-                            jd_rise.replace(t);
-                        } else {
-                            jd_set.replace(t);
-                        }
-                    }
-                    QuadraticRoots::Two { root1, root2 } => {
-                        let t1 = hour_offset + root1;
-                        let t2 = hour_offset + root2;
-                        let mut t1 = t1 * DAY_PER_HOUR + jd0; // decimal hour to JD
-                        let mut t2 = t2 * DAY_PER_HOUR + jd0;
-
-                        if quadratic.y_extremum() < 0.0 {
-                            core::mem::swap(&mut t1, &mut t2);
-                        }
-
-                        jd_rise.replace(t1);
-                        jd_set.replace(t2);
-                    }
-                }
-            }
-
-            // advance the start point
-            y_minus = y_plus; // the last is the first on the next round
-            hour_offset += 2.0; // searching window size is 3
-        }
-
-        let to_event_info = |mut jd| {
-            const DT: f64 = 50.0 / SECONDS_PER_DAY;
-            const INV_2DT: f64 = 1.0 / (2.0 * DT);
-            const MAX_ITER: u8 = 2;
-
-            // newton iteration to refine the root, i.e, the rise/set time
-            for _ in 0..MAX_ITER {
-                let altitude = sin_altitude(jd);
-
-                // central difference: dh/dt = (h(t + dt) - h(t - dt)) / (2*dt)
-                // t0_next = t0_now - h/(dh/dt)
-                let delta_altitude = INV_2DT * (sin_altitude(jd + DT) - sin_altitude(jd - DT));
-                jd -= altitude / delta_altitude;
-            }
-
-            let HorizontalCoordinate { azimuth, .. } = self.get_pos(jd, dt_days, lat, lon);
-
-            EventInfo { jd, azimuth }
-        };
-        let rise = jd_rise.map(to_event_info);
-        let set = jd_set.map(to_event_info);
-
-        (rise, set)
-    }
-
-    /// apparent RA, DEC and distance to the planet
-    fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
-        match self {
-            SolarObject::Moon => moon_coord(jde),
-            SolarObject::Sun => {
-                let (ra, dec) = sun_coord(jde);
-                (ra, dec, 0.0)
-            }
-        }
-    }
+    eps_arcsec * RADS_PER_ARCSECOND
 }
 
 pub trait PlanetUpdater {

@@ -1,4 +1,4 @@
-use libm::{asin, atan2, cos, floor, sin, sincos};
+use libm::{cos, floor};
 use smart_leds::{RGB, RGB8};
 use time::UtcDateTime;
 
@@ -160,28 +160,6 @@ impl Sun {
             RGB::new(0, 80, 255) // Moon color
         }
     }
-}
-
-/// Sun's apparent equatorial coordinates, Meeus ch. 25. d = days since J2000 (TT);
-/// return right asc and declination
-/// ported from SunCalc: https://github.com/mourner/suncalc
-pub(crate) fn sun_coord(d: f64) -> (f64, f64) {
-    let t = d / 36525.0; // Julian centuries
-    let l0 = (280.46646 + t * (36000.76983 + t * 0.0003032)).to_radians(); // 25.2 geometric mean longitude
-    let m = (357.52911 + t * (35999.05029 - t * 0.0001537)).to_radians(); // 25.3 mean anomaly
-    let (sin_m, cos_m) = sincos(m);
-    let c = ((1.914602 - t * (0.004817 + t * 0.000014)) * sin_m + // equation of center
-        (0.019993 - 0.000101 * t) * 2.0 * sin_m * cos_m + 0.000289 * sin_m * (3.0 - 4.0 * sin_m * sin_m)).to_radians();
-    let o_m = (125.04 - 1934.136 * t).to_radians(); // longitude of the ascending node
-    let lon_apparent = l0 + c - (0.00569 + 0.00478 * sin(o_m)).to_radians(); // apparent longitude (nutation + aberration)
-    // 22.2 mean obliquity + 25.8 correction for apparent position
-    let e = (23.439291 - t * (0.0130042 + t * (0.00000016 - t * 0.000000504))).to_radians()
-        + (0.00256 * cos(o_m)).to_radians();
-
-    let ra = atan2(cos(e) * sin(lon_apparent), cos(lon_apparent)); // 25.6
-    let dec = asin(sin(e) * sin(lon_apparent)); // 25.7
-
-    (ra, dec)
 }
 
 /// 24 periodic terms, table 27.c,

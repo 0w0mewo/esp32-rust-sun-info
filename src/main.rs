@@ -32,6 +32,7 @@ use lib::ui::Ui;
 use lib::ui::ui_flush_task;
 use lib::ui::{self};
 use log::error;
+use log::info;
 use time::SignedDuration;
 use time::Time;
 use time::UtcDateTime;
@@ -70,6 +71,8 @@ async fn main(spawner: Spawner) -> ! {
         error!("Startup failed: {}, reseting..", e);
         system::software_reset();
     });
+
+    info!("system boot");
 
     // sun and moon calc
     let mut sun = Sun::default();
