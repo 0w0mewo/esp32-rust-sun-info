@@ -352,14 +352,14 @@ impl SolarObject {
 
     /// heliocentric equatorial rectangle coordinates(refers J2000 equinox) of the planet
     ///
+    /// `t` should be julian centuries sicne JD2000,
     /// return (x, y, z) tuple
-    fn icrs(&self, jde: f64) -> (f64, f64, f64) {
+    fn icrs(&self, t: f64) -> (f64, f64, f64) {
         if let Self::Sun = self {
             return (0.0, 0.0, 0.0);
         }
 
         // 1.
-        let t = (jde - J2000) / 36525.0;
         let kep_rad =
             self.keplerian_element().with_radians() + self.keplerian_rate().with_radians() * t;
         let anom_correction_rad = if let Some(coffs) = self.mean_anomaly_extra() {
@@ -407,21 +407,49 @@ impl SolarObject {
 
     /// geocentric equatorial rectangle coordinates(refers to J2000 equinox) of the planet
     ///
+    /// `t` should be julian centuries sicne JD2000,
     /// return (x, y, z) tuple
-    fn gcrs(&self, jde: f64) -> (f64, f64, f64) {
-        let (x_earth, y_earth, z_earth) = Self::Earth.icrs(jde);
-        let (x, y, z) = self.icrs(jde);
+    fn gcrs(&self, t: f64) -> (f64, f64, f64) {
+        let (x_earth, y_earth, z_earth) = Self::Earth.icrs(t);
+        let (x, y, z) = self.icrs(t);
 
         (x - x_earth, y - y_earth, z - z_earth)
     }
 
     /// geocentric equatorial rectangle coordinates(refers to of-date equinox) of the planet
     ///
+    /// `t` should be julian centuries sicne JD2000,
     /// return (x, y, z) tuple
-    fn gcrs_ofdate(&self, jde: f64) -> (f64, f64, f64) {
-        let (x, y, z) = self.gcrs(jde);
+    fn gcrs_ofdate(&self, t: f64) -> (f64, f64, f64) {
+        let (x, y, z) = self.gcrs(t);
 
-        NpbTransformer::new(jde).transform(x, y, z)
+        NpbTransformer::new(t).transform(x, y, z)
+    }
+
+    /// apparent RA, DEC and distance to the planet
+    fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
+        let t = (jde - J2000) / 36525.0;
+        match self {
+            SolarObject::Moon => moon_coord(t),
+            _ => {
+                let (x, y, z) = self.gcrs_ofdate(t);
+
+                // convert to spherical coordinates
+                let dist = sqrt(x * x + y * y + z * z);
+                let mut ra = atan2(y, x);
+                let mut dec = acos(z / dist);
+
+                // ra should in range [0, 2*pi]
+                if ra < 0.0 {
+                    ra += TAU;
+                }
+
+                // dec should in range [-pi/2, pi/2]
+                dec = 0.5 * PI - dec;
+
+                (ra, dec, dist)
+            }
+        }
     }
 
     pub fn get_pos(&self, jd: f64, delta_t: f64, lat: f64, lon: f64) -> HorizontalCoordinate {
@@ -572,31 +600,6 @@ impl SolarObject {
         let set = jd_set.map(to_event_info);
 
         (rise, set)
-    }
-
-    /// apparent RA, DEC and distance to the planet
-    fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
-        match self {
-            SolarObject::Moon => moon_coord(jde - J2000),
-            _ => {
-                let (x, y, z) = self.gcrs_ofdate(jde);
-
-                // convert to spherical coordinates
-                let dist = sqrt(x * x + y * y + z * z);
-                let mut ra = atan2(y, x);
-                let mut dec = acos(z / dist);
-
-                // ra should in range [0, 2*pi]
-                if ra < 0.0 {
-                    ra += TAU;
-                }
-
-                // dec should in range [-pi/2, pi/2]
-                dec = 0.5 * PI - dec;
-
-                (ra, dec, dist)
-            }
-        }
     }
 }
 

@@ -490,11 +490,10 @@ const MOON_LAT_LUT: [(f64, f64, f64, f64, f64); 60] = [
     (2.00, -2.00, 0.00, 1.00, 107.00),
 ];
 
-/// geocentric apparent equatorial coordinates of the Moon, Meeus ch. 47. jde = days since J2000 (TT).
+/// geocentric apparent equatorial coordinates of the Moon, Meeus ch. 47. t = julian century since JD2000.
 /// return right asc and declination in radians, distance in km
 /// ported from SunCalc: https://github.com/mourner/suncalc
-pub(crate) fn moon_coord(jde: f64) -> (f64, f64, f64) {
-    let t = jde / 36525.0;
+pub(crate) fn moon_coord(t: f64) -> (f64, f64, f64) {
     let t2 = t * t;
     let t3 = t2 * t;
     let t4 = t3 * t;

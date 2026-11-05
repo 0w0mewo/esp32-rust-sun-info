@@ -2,7 +2,6 @@ use libm::sincos;
 
 use crate::{
     RADS_PER_ARCSECOND,
-    datetime::J2000,
     solar::{mean_obliq, nutation::nutation_iau2006},
 };
 
@@ -15,7 +14,8 @@ pub(crate) struct NpbTransformer {
 }
 
 impl NpbTransformer {
-    pub fn new(jde: f64) -> Self {
+    /// `t`: julian centuries since JD2000
+    pub fn new(t: f64) -> Self {
         let mut angles = Self {
             eps: 0.0,
             gamma: 0.0,
@@ -23,14 +23,13 @@ impl NpbTransformer {
             psi: 0.0,
         };
 
-        angles.update(jde);
+        angles.update(t);
 
         angles
     }
 
     /// recalculate angles with new julian centuries, the `t` should be julian centuries since JD2000
-    pub fn update(&mut self, jde: f64) {
-        let t = (jde - J2000) / 36525.0;
+    pub fn update(&mut self, t: f64) {
         let t2 = t * t;
         let t3 = t2 * t;
         let t4 = t3 * t;
