@@ -3,11 +3,12 @@ use core::{
     ops::{Add, Mul},
 };
 
-use libm::{acos, asin, atan2, cos, sin, sincos, sqrt};
+use libm::{acos, asin, atan, atan2, cos, sin, sincos, sqrt, tan};
 use time::UtcDateTime;
 
 use crate::{
-    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
+    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, RADS_PER_ARCSECOND,
+    SECONDS_PER_DAY,
     datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, sidereal_time},
     sine_altitude,
     solar::{EventInfo, MEAN_OBLIQUITY_J2000_RAD, moon::moon_coord, npb::NpbTransformer},
@@ -426,8 +427,11 @@ impl SolarObject {
         NpbTransformer::new(t).transform(x, y, z)
     }
 
-    /// apparent RA, DEC and distance to the planet
-    fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
+    /// apparent geocentric RA, DEC and distance to the planet
+    /// RA and DEC are in radians, distance is in AU
+    ///
+    /// return `(ra, dec, dist)`
+    pub fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
         let t = (jde - J2000) / 36525.0;
         match self {
             SolarObject::Moon => moon_coord(t),
@@ -452,24 +456,57 @@ impl SolarObject {
         }
     }
 
+    /// topocentric hour angle and declination by
+    /// applying parallex to apparent geocentric equatorial coordinates
+    ///
+    /// return `(hour angle, dec)` in radians
+    fn apparent_ha_dec_topocentric(
+        &self,
+        jd: f64,
+        delta_t: f64,
+        lat_rad: f64,
+        lon_rad: f64,
+    ) -> (f64, f64) {
+        let (ra_rad, dec_rad, dist_au) = self.apparent_ra_dec_r(jd + delta_t);
+        let ha_rad = sidereal_time(jd, lon_rad) - ra_rad;
+
+        // meeus ch.11
+        // geocentric latitude
+        let tan_u = 0.99664719 * tan(lat_rad);
+        let u = atan(tan_u);
+        let observer_height = 0.0; // TODO
+        let rho_sin_phi_prime = 0.99664719 * sin(u) + (observer_height / 6378140.0) * sin(lat_rad);
+        let rho_cos_phi_prime = cos(u) + (observer_height / 6378140.0) * cos(lat_rad);
+
+        // convert to topcentric HA/DEC
+        // meeus ch.40
+        let sin_pi = sin(sin(8.794 * RADS_PER_ARCSECOND) / dist_au);
+
+        // 40.6
+        let (ha_sin, ha_cos) = sincos(ha_rad);
+        let (dec_sin, dec_cos) = sincos(dec_rad);
+        let a = dec_cos * ha_sin;
+        let b = dec_cos * ha_cos - rho_cos_phi_prime * sin_pi;
+        let c = dec_sin - rho_sin_phi_prime * sin_pi;
+        let q = sqrt(a * a + b * b + c * c); // 40.7
+
+        let ha_corrected = atan2(a, b);
+        let dec_corrected = asin(c / q);
+
+        (ha_corrected, dec_corrected)
+    }
+
+    /// horizontal position of the planet
+    ///
+    /// `jd`: julian days, `delta_t`: delta T in days,
+    /// `lat`: latitude in degrees, `lon`: longitude in degrees
     pub fn get_pos(&self, jd: f64, delta_t: f64, lat: f64, lon: f64) -> HorizontalCoordinate {
         let lat_rad = lat.to_radians();
         let lon_rad = lon.to_radians();
-        let lst = sidereal_time(jd, lon_rad);
 
-        let jde = jd + delta_t;
-        let (ra, dec, dist) = self.apparent_ra_dec_r(jde);
-        let hour_angle = lst - ra;
+        let (ha_rad, dec_rad) = self.apparent_ha_dec_topocentric(jd, delta_t, lat_rad, lon_rad);
 
-        let mut pos = HorizontalCoordinate::from_equatorial(hour_angle, lat_rad, dec);
-        if let SolarObject::Moon = self {
-            let altitude_geocentric_rad = pos.altitude.to_radians();
-            pos.altitude = (altitude_geocentric_rad
-                - asin(6378.14 / dist * cos(altitude_geocentric_rad)))
-            .to_degrees();
-        }
-
-        pos.apparent_altitude()
+        HorizontalCoordinate::from_equatorial(ha_rad, lat_rad, dec_rad).apparent_altitude()
     }
 
     /// find upcoming rise and set events,
@@ -518,11 +555,9 @@ impl SolarObject {
 
         // sine altitude at JD
         let sin_altitude = |jd: f64| {
-            let jde = jd + dt_days;
-            let (ra_rad, dec_rad, _) = self.apparent_ra_dec_r(jde);
-            let hr_angle_rad = sidereal_time(jd, lon_rad) - ra_rad;
+            let (ha_rad, dec_rad) = self.apparent_ha_dec_topocentric(jd, dt_days, lat_rad, lon_rad);
 
-            sine_altitude(dec_rad, lat_rad, hr_angle_rad) - refracted_sine_horizon_altitude
+            sine_altitude(dec_rad, lat_rad, ha_rad) - refracted_sine_horizon_altitude
         };
 
         // sine altitude of the object from given hour offset of JD0

@@ -1,4 +1,3 @@
-
 use libm::{floor, fmod, round};
 use time::{PlainDateTime, UtcDateTime};
 
@@ -16,6 +15,8 @@ pub mod sun;
 
 /// obliquity at J2000 in radians
 pub const MEAN_OBLIQUITY_J2000_RAD: f64 = mean_obliq(0.0);
+// astronomical unit in km
+pub const ASTRONOMICAL_UNIT_KM: f64 = 149597870700_f64 / 1000.0;
 
 #[derive(Clone, Default)]
 pub struct EventInfo {

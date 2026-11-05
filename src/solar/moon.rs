@@ -3,7 +3,12 @@ use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 use time::UtcDateTime;
 
 use crate::{
-    HorizontalCoordinate, datetime::{AstronDatetimeExt, DateExt, delta_t_2000}, solar::{EventInfo, PlanetUpdater, mean_obliq, nutation::nutation_iau2006, planet::SolarObject},
+    HorizontalCoordinate,
+    datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
+    solar::{
+        ASTRONOMICAL_UNIT_KM, EventInfo, PlanetUpdater, mean_obliq, nutation::nutation_iau2006,
+        planet::SolarObject,
+    },
 };
 
 const LUNAR_ORBIT_PERIOD_AVG: f64 = 29.530588861;
@@ -491,7 +496,7 @@ const MOON_LAT_LUT: [(f64, f64, f64, f64, f64); 60] = [
 ];
 
 /// geocentric apparent equatorial coordinates of the Moon, Meeus ch. 47. t = julian century since JD2000.
-/// return right asc and declination in radians, distance in km
+/// return right asc and declination in radians, distance in AU
 /// ported from SunCalc: https://github.com/mourner/suncalc
 pub(crate) fn moon_coord(t: f64) -> (f64, f64, f64) {
     let t2 = t * t;
@@ -575,7 +580,7 @@ pub(crate) fn moon_coord(t: f64) -> (f64, f64, f64) {
         cos(l_rad),
     );
     let dec = asin(sin(b_rad) * cos(eps_rad) + cos(b_rad) * sin(eps_rad) * sin(l_rad));
-    let dist = 385000.56 + sum_r / 1000.0;
+    let dist = 385000.56 + sum_r / 1000.0 / ASTRONOMICAL_UNIT_KM;
 
     (ra, dec, dist)
 }
