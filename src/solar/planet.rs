@@ -7,8 +7,8 @@ use libm::{acos, asin, atan, atan2, cos, sin, sincos, sqrt, tan};
 use time::UtcDateTime;
 
 use crate::{
-    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, RADS_PER_ARCSECOND,
-    SECONDS_PER_DAY,
+    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
+    config::OBSERVER_ALTITUDE,
     datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, sidereal_time},
     sine_altitude,
     solar::{EventInfo, MEAN_OBLIQUITY_J2000_RAD, moon::moon_coord, npb::NpbTransformer},
@@ -467,27 +467,29 @@ impl SolarObject {
         lat_rad: f64,
         lon_rad: f64,
     ) -> (f64, f64) {
+        // sin(p_sun) = sin((8.7941433 * (1.0/3600.0)).to_radians())
+        const SINE_EQUATORIAL_SOLAR_PARALLAX: f64 = 4.2635209841860855e-5;
+
         let (ra_rad, dec_rad, dist_au) = self.apparent_ra_dec_r(jd + delta_t);
         let ha_rad = sidereal_time(jd, lon_rad) - ra_rad;
 
         // meeus ch.11
         // geocentric latitude
-        let tan_u = 0.99664719 * tan(lat_rad);
-        let u = atan(tan_u);
-        let observer_height = 0.0; // TODO
-        let rho_sin_phi_prime = 0.99664719 * sin(u) + (observer_height / 6378140.0) * sin(lat_rad);
-        let rho_cos_phi_prime = cos(u) + (observer_height / 6378140.0) * cos(lat_rad);
+        let u = atan(0.99664719 * tan(lat_rad));
+        let rho_sin_phi_prime =
+            0.99664719 * sin(u) + (OBSERVER_ALTITUDE / 6378140.0) * sin(lat_rad);
+        let rho_cos_phi_prime = cos(u) + (OBSERVER_ALTITUDE / 6378140.0) * cos(lat_rad);
 
         // convert to topcentric HA/DEC
         // meeus ch.40
-        let sin_pi = sin(sin(8.794 * RADS_PER_ARCSECOND) / dist_au);
+        let par_sin = SINE_EQUATORIAL_SOLAR_PARALLAX / dist_au;
 
         // 40.6
         let (ha_sin, ha_cos) = sincos(ha_rad);
         let (dec_sin, dec_cos) = sincos(dec_rad);
         let a = dec_cos * ha_sin;
-        let b = dec_cos * ha_cos - rho_cos_phi_prime * sin_pi;
-        let c = dec_sin - rho_sin_phi_prime * sin_pi;
+        let b = dec_cos * ha_cos - rho_cos_phi_prime * par_sin;
+        let c = dec_sin - rho_sin_phi_prime * par_sin;
         let q = sqrt(a * a + b * b + c * c); // 40.7
 
         let ha_corrected = atan2(a, b);

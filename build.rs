@@ -83,6 +83,7 @@ fn populate_configs() -> std::io::Result<()> {
     let update_sec: u64 = env!("UPDATE_SEC").parse().unwrap_or(2);
     let lat: f64 = env!("LAT").parse().unwrap_or(-33.8651);
     let lon: f64 = env!("LON").parse().unwrap_or(151.2099);
+    let altitude: f64 = env!("ALT").parse().unwrap_or(0.0);
 
     // find timezone offset seconds by lat and lon
     let tz_finder = tzf_rs::DefaultFinder::new();
@@ -123,6 +124,7 @@ fn populate_configs() -> std::io::Result<()> {
 pub const UPDATE_SEC: u64 = {update_sec};
 pub const LAT: f64 = {lat};
 pub const LON: f64 = {lon}; // {tz_str}
+pub const OBSERVER_ALTITUDE: f64 = {altitude:.2}; // in meters above sea level
 
 /// standard time zone offset reference to UTC, without DST rules
 pub const TZ_OFFSET: time::UtcOffset = time::macros::offset!({tz_offset_hr:+02}:{tz_offset_minute:02}:{tz_offset_secs:02});

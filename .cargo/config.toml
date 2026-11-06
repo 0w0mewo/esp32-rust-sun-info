@@ -17,6 +17,7 @@ NTP_SERVER="pool.ntp.org"
 UPDATE_SEC="2"
 LAT=""
 LON=""
+ALT=""
 ESP_LOG="info"
 
 [build]
