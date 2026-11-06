@@ -1,12 +1,14 @@
-use libm::{floor, fmod, round};
+use libm::{cos, floor, fmod, round, sincos};
 use time::{PlainDateTime, UtcDateTime};
 
 use crate::{
-    HorizontalCoordinate, RADS_PER_ARCSECOND, SECONDS_PER_DAY,
+    SECONDS_PER_DAY,
     datetime::{AstronDatetimeExt, UtOffsetExt},
-    solar::planet::SolarObject,
+    math::RADS_PER_ARCSECOND,
+    solar::{coord::HorizontalCoordinate, planet::SolarObject},
 };
 
+pub mod coord;
 pub mod moon;
 pub mod npb;
 pub mod nutation;
@@ -65,6 +67,20 @@ const fn mean_obliq(t: f64) -> f64 {
     eps_arcsec * RADS_PER_ARCSECOND
 }
 
+fn sine_altitude(dec_rad: f64, lat_rad: f64, ha_rad: f64) -> f64 {
+    let (dec_sin, dec_cos) = sincos(dec_rad);
+    let (lat_sin, lat_cos) = sincos(lat_rad);
+
+    lat_sin * dec_sin + lat_cos * dec_cos * cos(ha_rad)
+}
+
+/// ported from SunCalc: https://github.com/mourner/suncalc
+fn astro_refraction(h: f64) -> f64 {
+    let h = h.to_radians().max(0.0); // formula valid for positive altitudes only
+
+    // Meeus 16.4: 1.02 / tan(h + 10.26 / (h + 5.10)), h in degrees, arcmin result — folded into degree
+    0.0002967 / libm::tan(h + 0.00312536 / (h + 0.08901179)).to_degrees()
+}
 pub trait PlanetUpdater {
     /// update horizontal position
     fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64);

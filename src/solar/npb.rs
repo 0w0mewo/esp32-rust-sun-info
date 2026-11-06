@@ -1,7 +1,7 @@
 use libm::sincos;
 
 use crate::{
-    RADS_PER_ARCSECOND,
+    math::RADS_PER_ARCSECOND,
     solar::{mean_obliq, nutation::nutation_iau2006},
 };
 

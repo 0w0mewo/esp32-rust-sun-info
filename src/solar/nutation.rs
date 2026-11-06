@@ -1,6 +1,9 @@
 use libm::sincos;
 
-use crate::{RADS_PER_ARCSECOND, datetime::J2000};
+use crate::{
+    datetime::{DAYS_PER_JULIAN_CENTURY, J2000},
+    math::RADS_PER_ARCSECOND,
+};
 
 /// IAU20006 nutation model in radians,
 ///
@@ -8,7 +11,7 @@ use crate::{RADS_PER_ARCSECOND, datetime::J2000};
 ///
 /// return (dpsi, deps)
 pub(crate) fn nutation_iau2006(t: f64) -> (f64, f64) {
-    let jd = t / 36525.0 + J2000;
+    let jd = t / DAYS_PER_JULIAN_CENTURY + J2000;
     let fj2 = -2.7774e-6 * jd;
     let (mut dpsi, mut deps) = nutation_iau2000b(t);
 

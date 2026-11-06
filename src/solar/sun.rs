@@ -3,9 +3,9 @@ use smart_leds::{RGB, RGB8};
 use time::UtcDateTime;
 
 use crate::{
-    DAYS_PER_JULIAN_CENTURY, HorizontalCoordinate,
+    DAYS_PER_JULIAN_CENTURY,
     datetime::{AstronDatetimeExt, J2000, delta_t_2000},
-    solar::{EventInfo, PlanetUpdater, SolarObject},
+    solar::{EventInfo, PlanetUpdater, SolarObject, coord::HorizontalCoordinate},
 };
 
 const TWILIGHT_REFRACTION_RAD: f64 = -6.0f64.to_radians();

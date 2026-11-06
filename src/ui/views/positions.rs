@@ -11,9 +11,8 @@ use embedded_graphics_unicodefonts::MONO_5X7;
 use libm::{round, sincos};
 
 use crate::{
-    HorizontalCoordinate,
     datetime::{AstronDatetimeExt, UtOffsetExt},
-    solar::planet::SolarObject,
+    solar::{coord::HorizontalCoordinate, planet::SolarObject},
     ui::{
         UpdateCmd,
         components::{CommonStatusTexts, Compass, DEG_SYM, MOON_SYM, PolarLine, SUN_SYM},

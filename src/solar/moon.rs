@@ -3,11 +3,10 @@ use libm::{asin, atan2, cos, floor, fmod, sin, tan};
 use time::UtcDateTime;
 
 use crate::{
-    HorizontalCoordinate,
     datetime::{AstronDatetimeExt, DateExt, delta_t_2000},
     solar::{
-        ASTRONOMICAL_UNIT_KM, EventInfo, PlanetUpdater, mean_obliq, nutation::nutation_iau2006,
-        planet::SolarObject,
+        ASTRONOMICAL_UNIT_KM, EventInfo, PlanetUpdater, coord::HorizontalCoordinate, mean_obliq,
+        nutation::nutation_iau2006, planet::SolarObject,
     },
 };
 

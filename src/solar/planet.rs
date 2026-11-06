@@ -7,12 +7,14 @@ use libm::{acos, asin, atan, atan2, cos, sin, sincos, sqrt, tan};
 use time::UtcDateTime;
 
 use crate::{
-    HorizontalCoordinate, QuadraticInterpolator, QuadraticRoots, SECONDS_PER_DAY,
+    SECONDS_PER_DAY,
     config::OBSERVER_ALTITUDE,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, J2000, sidereal_time},
-    sine_altitude,
-    solar::{EventInfo, MEAN_OBLIQUITY_J2000_RAD, moon::moon_coord, npb::NpbTransformer},
-    wrap_pi,
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, DAYS_PER_JULIAN_CENTURY, J2000, sidereal_time},
+    math::{QuadraticInterpolator, QuadraticRoots, wrap_pi},
+    solar::{
+        EventInfo, MEAN_OBLIQUITY_J2000_RAD, coord::HorizontalCoordinate, moon::moon_coord,
+        npb::NpbTransformer, sine_altitude,
+    },
 };
 
 #[derive(Clone)]
@@ -432,7 +434,7 @@ impl SolarObject {
     ///
     /// return `(ra, dec, dist)`
     pub fn apparent_ra_dec_r(&self, jde: f64) -> (f64, f64, f64) {
-        let t = (jde - J2000) / 36525.0;
+        let t = (jde - J2000) / DAYS_PER_JULIAN_CENTURY;
         match self {
             SolarObject::Moon => moon_coord(t),
             _ => {

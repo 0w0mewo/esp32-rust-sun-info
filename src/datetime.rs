@@ -4,8 +4,9 @@ use libm::floor;
 use time::{Date, OffsetDateTime, PlainDateTime, SignedDuration, Time, UtcDateTime, UtcOffset};
 
 use crate::{
-    HOUR_PER_RAD, SECONDS_PER_DAY,
+    SECONDS_PER_DAY,
     config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR, TZ_OFFSET, TZ_OFFSET_DST},
+    math::HOUR_PER_RAD,
 };
 
 pub const J2000: f64 = 2451545.0;

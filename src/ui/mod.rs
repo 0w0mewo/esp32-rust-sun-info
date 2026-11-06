@@ -8,6 +8,7 @@ use time::UtcDateTime;
 
 use crate::board::I2cBusDeviceAsync;
 use crate::events::NtpStatus;
+use crate::solar::coord::HorizontalCoordinate;
 use crate::solar::moon::{self, Moon};
 use crate::solar::planet::SolarObject;
 use crate::solar::sun::{
@@ -15,7 +16,7 @@ use crate::solar::sun::{
 };
 use crate::solar::{EventInfo, PlanetUpdater};
 use crate::ui::views::View;
-use crate::{AppError, HorizontalCoordinate, SSD1306};
+use crate::{AppError, SSD1306};
 
 extern crate alloc;
 use alloc::string::String;
