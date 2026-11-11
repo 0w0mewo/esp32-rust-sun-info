@@ -89,24 +89,6 @@ impl Mul<f64> for OrbitialElements {
     }
 }
 
-struct MeanAnomalyExtra {
-    b: f64,
-    c: f64,
-    s: f64,
-    f: f64,
-}
-
-impl MeanAnomalyExtra {
-    pub fn with_radians(&self) -> Self {
-        Self {
-            b: self.b.to_radians(),
-            c: self.c.to_radians(),
-            s: self.s.to_radians(),
-            f: self.f.to_radians(),
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub enum SolarObject {
     Sun,
@@ -124,169 +106,10 @@ pub enum SolarObject {
 
 /// https://ssd.jpl.nasa.gov/planets/approx_pos.html
 impl SolarObject {
-    /// Keplerian elements, in degrees
-    const fn keplerian_element(&self) -> OrbitialElements {
-        // table 2a
-        match self {
-            Self::Mercury => OrbitialElements {
-                a: 0.38709843,
-                e: 0.20563661,
-                inc: 7.00559432,
-                mean_lon: 252.25166724,
-                omega_bar: 77.45771895,
-                omega0: 48.33961819,
-            },
-            Self::Venus => OrbitialElements {
-                a: 0.72332102,
-                e: 0.00676399,
-                inc: 3.39777545,
-                mean_lon: 181.97970850,
-                omega_bar: 131.76755713,
-                omega0: 76.67261496,
-            },
-            Self::Earth => OrbitialElements {
-                a: 1.00000018,
-                e: 0.01673163,
-                inc: -0.00054346,
-                mean_lon: 100.46691572,
-                omega_bar: 102.93005885,
-                omega0: -5.11260389,
-            },
-            Self::Mars => OrbitialElements {
-                a: 1.52371243,
-                e: 0.09336511,
-                inc: 1.85181869,
-                mean_lon: -4.56813164,
-                omega_bar: -23.91744784,
-                omega0: 49.71320984,
-            },
-            Self::Jupiter => OrbitialElements {
-                a: 5.20248019,
-                e: 0.04853590,
-                inc: 1.29861416,
-                mean_lon: 34.33479152,
-                omega_bar: 14.27495244,
-                omega0: 100.29282654,
-            },
-            Self::Saturn => OrbitialElements {
-                a: 9.54149883,
-                e: 0.05550825,
-                inc: 2.49424102,
-                mean_lon: 50.07571329,
-                omega_bar: 92.86136063,
-                omega0: 113.63998702,
-            },
-            Self::Uranus => OrbitialElements {
-                a: 19.18797948,
-                e: 0.04685740,
-                inc: 0.77298127,
-                mean_lon: 314.20276625,
-                omega_bar: 172.43404441,
-                omega0: 73.96250215,
-            },
-            Self::Neptune => OrbitialElements {
-                a: 30.06952752,
-                e: 0.00895439,
-                inc: 1.77005520,
-                mean_lon: 304.22289287,
-                omega_bar: 46.68158724,
-                omega0: 131.78635853,
-            },
-            Self::Sun => OrbitialElements {
-                a: 0.0,
-                e: 0.0,
-                inc: 0.0,
-                mean_lon: 0.0,
-                omega_bar: 0.0,
-                omega0: 0.0,
-            },
-            Self::Pluto => OrbitialElements {
-                a: 39.48686035,
-                e: 0.24885238,
-                inc: 17.14104260,
-                mean_lon: 238.96535011,
-                omega_bar: 224.09702598,
-                omega0: 110.30167986,
-            },
-            _ => OrbitialElements {
-                a: f64::INFINITY,
-                e: f64::INFINITY,
-                inc: f64::INFINITY,
-                mean_lon: f64::INFINITY,
-                omega_bar: f64::INFINITY,
-                omega0: f64::INFINITY,
-            },
-        }
-    }
-
     /// keplerian rates in degrees/century
     const fn keplerian_rate(&self) -> OrbitialElements {
-        // table 2a
+        // table 1
         match self {
-            Self::Mercury => OrbitialElements {
-                a: 0.00000000,
-                e: 0.00002123,
-                inc: -0.00590158,
-                mean_lon: 149472.67486623,
-                omega_bar: 0.15940013,
-                omega0: -0.12214182,
-            },
-            Self::Venus => OrbitialElements {
-                a: -0.00000026,
-                e: -0.00005107,
-                inc: 0.00043494,
-                mean_lon: 58517.81560260,
-                omega_bar: 0.05679648,
-                omega0: -0.27274174,
-            },
-            Self::Earth => OrbitialElements {
-                a: -0.00000003,
-                e: -0.00003661,
-                inc: -0.01337178,
-                mean_lon: 35999.37306329,
-                omega_bar: 0.31795260,
-                omega0: -0.24123856,
-            },
-            Self::Mars => OrbitialElements {
-                a: 0.00000097,
-                e: 0.00009149,
-                inc: -0.00724757,
-                mean_lon: 19139.29934243,
-                omega_bar: 0.45223625,
-                omega0: -0.26852431,
-            },
-            Self::Jupiter => OrbitialElements {
-                a: -0.00002864,
-                e: 0.00018026,
-                inc: -0.00322699,
-                mean_lon: 3034.90371757,
-                omega_bar: 0.18199196,
-                omega0: 0.13024619,
-            },
-            Self::Saturn => OrbitialElements {
-                a: -0.00003065,
-                e: -0.00032044,
-                inc: 0.00451969,
-                mean_lon: 1221.11494724,
-                omega_bar: 0.54179478,
-                omega0: -0.25015002,
-            },
-            Self::Uranus => OrbitialElements {
-                a: -0.00020455,
-                e: -0.00001550,
-                inc: -0.00180155,
-                mean_lon: 428.49512595,
-                omega_bar: 0.09266985,
-                omega0: 0.05739699,
-            },
-            Self::Neptune => OrbitialElements {
-                a: 0.00006447,
-                e: 0.00000818,
-                inc: 0.00022400,
-                mean_lon: 218.46515314,
-                omega_bar: 0.01009938,
-                omega0: -0.00606302,
-            },
             Self::Sun => OrbitialElements {
                 a: 0.0,
                 e: 0.0,
@@ -295,61 +118,181 @@ impl SolarObject {
                 omega_bar: 0.0,
                 omega0: 0.0,
             },
+            Self::Mercury => OrbitialElements {
+                a: 3.7e-7,
+                e: 0.00001906,
+                inc: -0.00594749,
+                mean_lon: 149472.67411175,
+                omega_bar: 0.16047689,
+                omega0: -0.12534081,
+            },
+            Self::Venus => OrbitialElements {
+                a: 0.0000039,
+                e: -0.00004107,
+                inc: -0.0007889,
+                mean_lon: 58517.81538729,
+                omega_bar: 0.00268329,
+                omega0: -0.27769418,
+            },
+            Self::Earth => OrbitialElements {
+                a: 0.00000562,
+                e: -0.00004392,
+                inc: -0.01294668,
+                mean_lon: 35999.37244981,
+                omega_bar: 0.32327364,
+                omega0: 0.0,
+            },
+            Self::Mars => OrbitialElements {
+                a: 0.00001847,
+                e: 0.00007882,
+                inc: -0.00813131,
+                mean_lon: 19140.30268499,
+                omega_bar: 0.44441088,
+                omega0: -0.29257343,
+            },
+            Self::Jupiter => OrbitialElements {
+                a: -0.00011607,
+                e: -0.00013253,
+                inc: -0.00183714,
+                mean_lon: 3034.74612775,
+                omega_bar: 0.21252668,
+                omega0: 0.20469106,
+            },
+            Self::Saturn => OrbitialElements {
+                a: -0.0012506,
+                e: -0.00050991,
+                inc: 0.00193609,
+                mean_lon: 1222.49362201,
+                omega_bar: -0.41897216,
+                omega0: -0.28867794,
+            },
+            Self::Uranus => OrbitialElements {
+                a: -0.00196176,
+                e: -0.00004397,
+                inc: -0.00242939,
+                mean_lon: 428.48202785,
+                omega_bar: 0.40805281,
+                omega0: 0.04240589,
+            },
+            Self::Neptune => OrbitialElements {
+                a: 0.00026291,
+                e: 0.00005105,
+                inc: 0.00035372,
+                mean_lon: 218.45945325,
+                omega_bar: -0.32241464,
+                omega0: -0.00508664,
+            },
             Self::Pluto => OrbitialElements {
-                a: 0.00449751,
-                e: 0.00006016,
-                inc: 0.00000501,
-                mean_lon: 145.18042903,
-                omega_bar: -0.00968827,
-                omega0: -0.00809981,
+                a: -0.00031596,
+                e: 0.0000517,
+                inc: 0.00004818,
+                mean_lon: 145.20780515,
+                omega_bar: -0.04062942,
+                omega0: -0.01183482,
             },
             _ => OrbitialElements {
-                a: f64::INFINITY,
-                e: f64::INFINITY,
-                inc: f64::INFINITY,
-                mean_lon: f64::INFINITY,
-                omega_bar: f64::INFINITY,
-                omega0: f64::INFINITY,
+                a: f64::NAN,
+                e: f64::NAN,
+                inc: f64::NAN,
+                mean_lon: f64::NAN,
+                omega_bar: f64::NAN,
+                omega0: f64::NAN,
             },
         }
     }
 
-    /// extra correction parameters when calculating mean anomaly of a planet,
-    /// return `None` if no correction needed
-    const fn mean_anomaly_extra(&self) -> Option<MeanAnomalyExtra> {
-        // table 2b
+    /// Keplerian elements, in degrees, valid between 1800AD to 2050AD
+    const fn keplerian_element(&self) -> OrbitialElements {
+        // table 1
         match self {
-            Self::Jupiter => Some(MeanAnomalyExtra {
-                b: -0.00012452,
-                c: 0.06064060,
-                s: -0.35635438,
-                f: 38.35125000,
-            }),
-            Self::Saturn => Some(MeanAnomalyExtra {
-                b: 0.00025899,
-                c: -0.13434469,
-                s: 0.87320147,
-                f: 38.35125000,
-            }),
-            Self::Uranus => Some(MeanAnomalyExtra {
-                b: 0.00058331,
-                c: -0.97731848,
-                s: 0.17689245,
-                f: 7.67025000,
-            }),
-            Self::Neptune => Some(MeanAnomalyExtra {
-                b: -0.00041348,
-                c: 0.68346318,
-                s: -0.10162547,
-                f: 7.67025000,
-            }),
-            Self::Pluto => Some(MeanAnomalyExtra {
-                b: -0.01262724,
-                c: 0.0,
-                s: 0.0,
-                f: 0.0,
-            }),
-            _ => None,
+            Self::Sun => OrbitialElements {
+                a: 0.0,
+                e: 0.0,
+                inc: 0.0,
+                mean_lon: 0.0,
+                omega_bar: 0.0,
+                omega0: 0.0,
+            },
+            Self::Mercury => OrbitialElements {
+                a: 0.38709927,
+                e: 0.20563593,
+                inc: 7.00497902,
+                mean_lon: 252.2503235,
+                omega_bar: 77.45779628,
+                omega0: 48.33076593,
+            },
+            Self::Venus => OrbitialElements {
+                a: 0.72333566,
+                e: 0.00677672,
+                inc: 3.39467605,
+                mean_lon: 181.9790995,
+                omega_bar: 131.60246718,
+                omega0: 76.67984255,
+            },
+            Self::Earth => OrbitialElements {
+                a: 1.00000261,
+                e: 0.01671123,
+                inc: -0.00001531,
+                mean_lon: 100.46457166,
+                omega_bar: 102.93768193,
+                omega0: 0.0,
+            },
+            Self::Mars => OrbitialElements {
+                a: 1.52371034,
+                e: 0.0933941,
+                inc: 1.84969142,
+                mean_lon: -4.55343205,
+                omega_bar: -23.94362959,
+                omega0: 49.55953891,
+            },
+            Self::Jupiter => OrbitialElements {
+                a: 5.202887,
+                e: 0.04838624,
+                inc: 1.30439695,
+                mean_lon: 34.39644051,
+                omega_bar: 14.72847983,
+                omega0: 100.47390909,
+            },
+            Self::Saturn => OrbitialElements {
+                a: 9.53667594,
+                e: 0.05386179,
+                inc: 2.48599187,
+                mean_lon: 49.95424423,
+                omega_bar: 92.59887831,
+                omega0: 113.66242448,
+            },
+            Self::Uranus => OrbitialElements {
+                a: 19.18916464,
+                e: 0.04725744,
+                inc: 0.77263783,
+                mean_lon: 313.23810451,
+                omega_bar: 170.9542763,
+                omega0: 74.01692503,
+            },
+            Self::Neptune => OrbitialElements {
+                a: 30.06992276,
+                e: 0.00859048,
+                inc: 1.77004347,
+                mean_lon: -55.12002969,
+                omega_bar: 44.96476227,
+                omega0: 131.78422574,
+            },
+            Self::Pluto => OrbitialElements {
+                a: 39.48211675,
+                e: 0.2488273,
+                inc: 17.14001206,
+                mean_lon: 238.92903833,
+                omega_bar: 224.06891629,
+                omega0: 110.30393684,
+            },
+            _ => OrbitialElements {
+                a: f64::NAN,
+                e: f64::NAN,
+                inc: f64::NAN,
+                mean_lon: f64::NAN,
+                omega_bar: f64::NAN,
+                omega0: f64::NAN,
+            },
         }
     }
 
@@ -365,17 +308,9 @@ impl SolarObject {
         // 1.
         let kep_rad =
             self.keplerian_element().with_radians() + self.keplerian_rate().with_radians() * t;
-        let anom_correction_rad = if let Some(coffs) = self.mean_anomaly_extra() {
-            let coffs = coffs.with_radians();
-            let (ft_sin, ft_cos) = sincos(t * coffs.f);
-
-            coffs.b * t * t + coffs.c * ft_cos + coffs.s * ft_sin
-        } else {
-            0.0
-        };
 
         // 2.
-        let mean_anom_rad = wrap_pi(kep_rad.mean_lon - kep_rad.omega_bar + anom_correction_rad); // wrap between -pi to pi
+        let mean_anom_rad = wrap_pi(kep_rad.mean_lon - kep_rad.omega_bar); // wrap between -pi to pi
         let w_rad = kep_rad.omega_bar - kep_rad.omega0;
 
         // 3.
