@@ -1,11 +1,13 @@
-use libm::{cos, floor, fmod, round, sincos};
+use core::f64::consts::TAU;
+
+use libm::{cos, floor, fmod, round, sincos, trunc};
 use time::{PlainDateTime, UtcDateTime};
 
 use crate::{
     SECONDS_PER_DAY,
-    datetime::{AstronDatetimeExt, UtOffsetExt},
-    math::RADS_PER_ARCSECOND,
-    solar::{coord::HorizontalCoordinate, planet::SolarObject},
+    datetime::{AstronDatetimeExt, DAYS_PER_JULIAN_CENTURY, J2000, UtOffsetExt},
+    math::{RADS_PER_ARCSECOND, wrap_2pi},
+    solar::{coord::HorizontalCoordinate, nutation::nutation_iau2006, planet::SolarObject},
 };
 
 pub mod coord;
@@ -81,6 +83,56 @@ fn astro_refraction(h: f64) -> f64 {
     // Meeus 16.4: 1.02 / tan(h + 10.26 / (h + 5.10)), h in degrees, arcmin result — folded into degree
     0.0002967 / libm::tan(h + 0.00312536 / (h + 0.08901179)).to_degrees()
 }
+
+/// local apparent sidereal time in radians
+pub fn apparent_sidereal_time(jd_ut: f64, dt_days: f64, lon_rad: f64) -> f64 {
+    let jde = jd_ut + dt_days;
+    let t = (jde - J2000) / DAYS_PER_JULIAN_CENTURY;
+
+    let gmst_rad = gmst(jd_ut, dt_days);
+
+    let (dpsi, deps) = nutation_iau2006(t);
+    let eps = mean_obliq(t) + deps; // true obliq
+    let eqeq = cos(eps) * dpsi; // equation of equinox
+
+    wrap_2pi(gmst_rad + lon_rad + eqeq)
+}
+
+/// local mean sidereal time in radians
+pub fn mean_sidereal_time(jd_ut: f64, dt_days: f64, lon_rad: f64) -> f64 {
+    let gmst_rad = gmst(jd_ut, dt_days);
+
+    wrap_2pi(gmst_rad + lon_rad)
+}
+
+/// Greenwich mean sidereal time in radians
+fn gmst(jd_ut: f64, dt_days: f64) -> f64 {
+    let jd_tt = jd_ut + dt_days;
+
+    let t = (jd_tt - J2000) / DAYS_PER_JULIAN_CENTURY;
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let t4 = t3 * t;
+    let t5 = t4 * t;
+
+    let era_rad = earth_rotation_angle(jd_ut);
+
+    era_rad
+        + RADS_PER_ARCSECOND
+            * (0.014506 + 4612.156534 * t + 1.3915817 * t2
+                - 0.00000044 * t3
+                - 0.000029956 * t4
+                - 0.0000000368 * t5)
+}
+
+/// Earth rotation angle in radians
+fn earth_rotation_angle(jd_ut: f64) -> f64 {
+    let t = jd_ut - J2000;
+    let f = jd_ut - trunc(jd_ut);
+
+    TAU * (f + 0.7790572732640 + 0.00273781191135448 * t)
+}
+
 pub trait PlanetUpdater {
     /// update horizontal position
     fn update_pos(&mut self, now: &UtcDateTime, lat: f64, lon: f64);

@@ -9,11 +9,11 @@ use time::UtcDateTime;
 use crate::{
     SECONDS_PER_DAY,
     config::OBSERVER_ALTITUDE,
-    datetime::{AstronDatetimeExt, DAY_PER_HOUR, DAYS_PER_JULIAN_CENTURY, J2000, sidereal_time},
+    datetime::{AstronDatetimeExt, DAY_PER_HOUR, DAYS_PER_JULIAN_CENTURY, J2000},
     math::{QuadraticInterpolator, QuadraticRoots, wrap_pi},
     solar::{
-        EventInfo, MEAN_OBLIQUITY_J2000_RAD, coord::HorizontalCoordinate, moon::moon_coord,
-        npb::NpbTransformer, sine_altitude,
+        EventInfo, MEAN_OBLIQUITY_J2000_RAD, apparent_sidereal_time, coord::HorizontalCoordinate,
+        moon::moon_coord, npb::NpbTransformer, sine_altitude,
     },
 };
 
@@ -473,7 +473,7 @@ impl SolarObject {
         const SINE_EQUATORIAL_SOLAR_PARALLAX: f64 = 4.2635209841860855e-5;
 
         let (ra_rad, dec_rad, dist_au) = self.apparent_ra_dec_r(jd + delta_t);
-        let ha_rad = sidereal_time(jd, lon_rad) - ra_rad;
+        let ha_rad = apparent_sidereal_time(jd, delta_t, lon_rad) - ra_rad;
 
         // meeus ch.11
         // geocentric latitude

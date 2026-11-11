@@ -1,5 +1,3 @@
-use core::f64::consts::TAU;
-
 use libm::floor;
 use time::{Date, OffsetDateTime, PlainDateTime, SignedDuration, Time, UtcDateTime, UtcOffset};
 
@@ -7,6 +5,7 @@ use crate::{
     SECONDS_PER_DAY,
     config::{TZ_DST_RULES, TZ_DST_RULES_START_YEAR, TZ_OFFSET, TZ_OFFSET_DST},
     math::HOUR_PER_RAD,
+    solar::apparent_sidereal_time,
 };
 
 pub const J2000: f64 = 2451545.0;
@@ -42,7 +41,8 @@ pub trait AstronDatetimeExt: DateExt {
     #[inline]
     fn to_sidereal_time(&self, lon_rad: f64) -> f64 {
         let jd = self.to_julian();
-        sidereal_time(jd, lon_rad)
+        let dt_days = self.delta_t();
+        apparent_sidereal_time(jd, dt_days, lon_rad)
     }
 
     /// local sidereal time in HMS, assume the current datetime is in UT
@@ -261,17 +261,4 @@ pub fn delta_t_2000(y: f64) -> f64 {
     };
 
     dt_sec / SECONDS_PER_DAY
-}
-
-/// local sidereal time in radians
-pub fn sidereal_time(jd: f64, lon_rad: f64) -> f64 {
-    let jd2000 = jd - J2000;
-    let t = jd2000 / DAYS_PER_JULIAN_CENTURY;
-
-    let gmst =
-        280.46061837 + 360.98564736629 * jd2000 + 0.000387933 * t * t - (t * t * t) / 38710000.0;
-    let gmst_rad = gmst.to_radians();
-
-    let lst = (gmst_rad + lon_rad) % TAU;
-    if lst < 0.0 { lst + TAU } else { lst }
 }

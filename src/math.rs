@@ -85,3 +85,8 @@ pub fn wrap_pi(rad: f64) -> f64 {
     let rad = rad % TAU;
     if rad.abs() > PI { rad - TAU } else { rad }
 }
+
+pub fn wrap_2pi(rad: f64) -> f64 {
+    let rad = rad % TAU;
+    if rad < 0.0 { rad + TAU } else { rad }
+}
