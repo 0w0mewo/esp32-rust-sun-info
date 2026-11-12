@@ -78,10 +78,15 @@ fn sine_altitude(dec_rad: f64, lat_rad: f64, ha_rad: f64) -> f64 {
 
 /// ported from SunCalc: https://github.com/mourner/suncalc
 fn astro_refraction(h: f64) -> f64 {
-    let h = h.to_radians().max(0.0); // formula valid for positive altitudes only
+    if h < -1.0 {
+        return 0.0;
+    }
 
-    // Meeus 16.4: 1.02 / tan(h + 10.26 / (h + 5.10)), h in degrees, arcmin result — folded into degree
-    0.0002967 / libm::tan(h + 0.00312536 / (h + 0.08901179)).to_degrees()
+    // Meeus 16.4: 1.02 / tan(h + 10.26 / (h + 5.10)), h in degrees, arcmin result
+    let refrac_arcm = 1.02 / libm::tan((h + 10.3 / (h + 5.11)).to_radians());
+
+    // to degrees
+    refrac_arcm / 60.0
 }
 
 /// local apparent sidereal time in radians
