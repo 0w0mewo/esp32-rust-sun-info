@@ -82,8 +82,9 @@ fn astro_refraction(h: f64) -> f64 {
         return 0.0;
     }
 
-    // Meeus 16.4: 1.02 / tan(h + 10.26 / (h + 5.10)), h in degrees, arcmin result
-    let refrac_arcm = 1.02 / libm::tan((h + 10.3 / (h + 5.11)).to_radians());
+    // Meeus 16.4: 1.02 / tan(h + 10.3 / (h + 5.11)), h in degrees, arcmin result
+    const FACTOR: f64 = 0.9496644295302014; // air factor: 101.0kPa, 25 degrees C, the orginal formula assumes 10 degrees C
+    let refrac_arcm = FACTOR * 1.02 / libm::tan((h + 10.3 / (h + 5.11)).to_radians());
 
     // to degrees
     refrac_arcm / 60.0
